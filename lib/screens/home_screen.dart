@@ -146,13 +146,41 @@ class _ApodCardState extends State<_ApodCard> {
     final apod = data.apod;
 
     if (apod.mediaType != 'image') {
+      final ytId = _youtubeId(apod.url);
+      if (ytId != null) {
+        // Mostra thumbnail do YouTube com ícone de play sobreposto
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            Image.network(
+              'https://img.youtube.com/vi/$ytId/hqdefault.jpg',
+              height: 200,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => _mediaBox(
+                child: const Icon(Icons.play_circle_outline,
+                    size: 64, color: Colors.white54),
+              ),
+            ),
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(32),
+              ),
+              child: const Icon(Icons.play_arrow, color: Colors.white, size: 40),
+            ),
+          ],
+        );
+      }
       return _mediaBox(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: const [
             Icon(Icons.play_circle_outline, size: 64, color: Colors.white54),
             SizedBox(height: 8),
-            Text('Vídeo disponível', style: TextStyle(color: Colors.white38)),
+            Text('Vídeo do dia', style: TextStyle(color: Colors.white54)),
           ],
         ),
       );
@@ -170,6 +198,26 @@ class _ApodCardState extends State<_ApodCard> {
     }
 
     return _networkImage(apod.url);
+  }
+
+  /// Extrai o ID do vídeo do YouTube de uma URL embed ou watch.
+  String? _youtubeId(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return null;
+    // youtube.com/embed/ID ou youtube.com/watch?v=ID
+    if (uri.host.contains('youtube.com')) {
+      final segments = uri.pathSegments;
+      final embedIdx = segments.indexOf('embed');
+      if (embedIdx != -1 && embedIdx + 1 < segments.length) {
+        return segments[embedIdx + 1];
+      }
+      return uri.queryParameters['v'];
+    }
+    // youtu.be/ID
+    if (uri.host.contains('youtu.be') && uri.pathSegments.isNotEmpty) {
+      return uri.pathSegments.first;
+    }
+    return null;
   }
 
   Widget _networkImage(String url) => Image.network(
@@ -211,17 +259,12 @@ class _IssCardState extends State<_IssCard> {
   }
 
   Future<IssPassTime> _fetchAndSchedule() async {
-    try {
-      final pass = await IssService.nextPass();
-      NotificationService.scheduleIssPass(pass.time).catchError((_) {});
-      return pass;
-    } on Exception catch (e) {
-      final msg = e.toString();
-      if (msg.contains('Connection reset') || msg.contains('SocketException') || msg.contains('Failed host')) {
-        throw Exception('Sem conexão. Verifique sua internet.');
-      }
-      rethrow;
+    final pass = await IssService.nextPass();
+    // Só agenda notificação se tiver horário de passagem real
+    if (pass.time != null) {
+      NotificationService.scheduleIssPass(pass.time!).catchError((_) {});
     }
+    return pass;
   }
 
   void _retry() {

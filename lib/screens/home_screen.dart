@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'observation_detail_screen.dart';
 import '../models/apod_model.dart';
 import '../models/observation_model.dart';
@@ -8,6 +9,7 @@ import '../services/nasa_service.dart';
 import '../services/iss_service.dart';
 import '../services/notification_service.dart';
 import '../services/apod_cache_service.dart';
+import '../widgets/supabase_image.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -72,6 +74,14 @@ class _ApodCardState extends State<_ApodCard> {
     });
   }
 
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<_ApodData>(
@@ -82,7 +92,10 @@ class _ApodCardState extends State<_ApodCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildMedia(snapshot),
+              GestureDetector(
+                onTap: snapshot.hasData ? () => _openUrl(snapshot.data!.apod.url) : null,
+                child: _buildMedia(snapshot),
+              ),
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
@@ -439,16 +452,13 @@ class _RecentObservationsState extends State<_RecentObservations> {
                         leading: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: obs.fotoUrl != null
-                              ? Image.network(
-                                  obs.fotoUrl!,
+                              ? SupabaseImage(
+                                  url: obs.fotoUrl!,
                                   width: 48,
                                   height: 48,
                                   fit: BoxFit.cover,
-                                  headers: {
-                                    'Authorization':
-                                        'Bearer ${Supabase.instance.client.auth.currentSession?.accessToken ?? ''}',
-                                  },
-                                  errorBuilder: (_, __, ___) => _photoPlaceholder(),
+                                  placeholder: _photoPlaceholder,
+                                  errorWidget: _photoPlaceholder,
                                 )
                               : _photoPlaceholder(),
                         ),

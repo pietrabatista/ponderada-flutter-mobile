@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/observation_model.dart';
 import '../services/observation_service.dart';
+import '../widgets/supabase_image.dart';
 import 'observation_detail_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -318,12 +319,6 @@ class _ObservationTile extends StatelessWidget {
     this.onDelete,
   });
 
-  Map<String, String> get _authHeaders {
-    final token =
-        Supabase.instance.client.auth.currentSession?.accessToken ?? '';
-    return {'Authorization': 'Bearer $token'};
-  }
-
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -333,13 +328,13 @@ class _ObservationTile extends StatelessWidget {
         leading: ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: observation.fotoUrl != null
-              ? Image.network(
-                  observation.fotoUrl!,
+              ? SupabaseImage(
+                  url: observation.fotoUrl!,
                   width: 56,
                   height: 56,
                   fit: BoxFit.cover,
-                  headers: _authHeaders,
-                  errorBuilder: (_, __, ___) => _placeholder(),
+                  placeholder: _placeholder,
+                  errorWidget: _placeholder,
                 )
               : _placeholder(),
         ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart' show Share;
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/observation_model.dart';
+import '../widgets/supabase_image.dart';
 
 class ObservationDetailScreen extends StatelessWidget {
   final ObservationModel observation;
@@ -59,14 +59,11 @@ class ObservationDetailScreen extends StatelessWidget {
                 ),
               ),
               background: observation.fotoUrl != null
-                  ? Image.network(
-                      observation.fotoUrl!,
+                  ? SupabaseImage(
+                      url: observation.fotoUrl!,
                       fit: BoxFit.cover,
-                      headers: {
-                        'Authorization':
-                            'Bearer ${Supabase.instance.client.auth.currentSession?.accessToken ?? ''}',
-                      },
-                      errorBuilder: (_, __, ___) => _photoPlaceholder(),
+                      placeholder: _photoPlaceholder,
+                      errorWidget: _photoPlaceholder,
                     )
                   : _photoPlaceholder(),
             ),

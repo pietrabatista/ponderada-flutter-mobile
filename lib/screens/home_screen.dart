@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_screen.dart';
+import '../models/apod_model.dart';
+import '../services/nasa_service.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -43,47 +45,115 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-class _ApodCard extends StatelessWidget {
+class _ApodCard extends StatefulWidget {
   const _ApodCard();
 
   @override
+  State<_ApodCard> createState() => _ApodCardState();
+}
+
+class _ApodCardState extends State<_ApodCard> {
+  late Future<ApodModel> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = NasaService.fetchApod();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            height: 200,
-            width: double.infinity,
-            color: Colors.indigo.shade900,
-            child: const Center(
-              child: Icon(Icons.image_outlined, size: 64, color: Colors.white30),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Foto do Dia',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: Colors.amber,
-                        letterSpacing: 1.2,
-                      ),
+    return FutureBuilder<ApodModel>(
+      future: _future,
+      builder: (context, snapshot) {
+        return Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildImage(snapshot),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'FOTO DO DIA',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: Colors.amber,
+                            letterSpacing: 1.2,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      snapshot.hasData
+                          ? snapshot.data!.title
+                          : snapshot.hasError
+                              ? 'Erro ao carregar'
+                              : 'Carregando...',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Carregando NASA APOD...',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        );
+      },
+    );
+  }
+
+  Widget _buildImage(AsyncSnapshot<ApodModel> snapshot) {
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return Container(
+        height: 200,
+        width: double.infinity,
+        color: Colors.indigo.shade900,
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (snapshot.hasError || !snapshot.hasData) {
+      return Container(
+        height: 200,
+        width: double.infinity,
+        color: Colors.indigo.shade900,
+        child: const Center(
+          child: Icon(Icons.broken_image_outlined, size: 64, color: Colors.white30),
+        ),
+      );
+    }
+    final apod = snapshot.data!;
+    if (apod.mediaType == 'image') {
+      return Image.network(
+        apod.url,
+        height: 200,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        loadingBuilder: (_, child, progress) => progress == null
+            ? child
+            : Container(
+                height: 200,
+                color: Colors.indigo.shade900,
+                child: const Center(child: CircularProgressIndicator()),
+              ),
+        errorBuilder: (_, __, ___) => Container(
+          height: 200,
+          color: Colors.indigo.shade900,
+          child: const Center(
+            child: Icon(Icons.broken_image_outlined, size: 64, color: Colors.white30),
+          ),
+        ),
+      );
+    }
+    // vídeo (ex: YouTube) — exibe ícone
+    return Container(
+      height: 200,
+      width: double.infinity,
+      color: Colors.indigo.shade900,
+      child: const Center(
+        child: Icon(Icons.play_circle_outline, size: 64, color: Colors.white54),
       ),
     );
   }

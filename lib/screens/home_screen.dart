@@ -50,13 +50,28 @@ class _ApodCardState extends State<_ApodCard> {
   }
 
   Future<ApodModel> _fetchApod() async {
-    final apod = await NasaService.fetchApod();
-    // Agenda notificação diária de APOD (respeitando preferência)
-    NotificationService.scheduleApodDaily().catchError((_) {});
-    return apod;
+    try {
+      final apod = await NasaService.fetchApod();
+      NotificationService.scheduleApodDaily().catchError((_) {});
+      return apod;
+    } on Exception catch (e) {
+      final msg = e.toString();
+      if (msg.contains('503') || msg.contains('429')) {
+        throw Exception('NASA API temporariamente indisponível. Tente mais tarde.');
+      }
+      if (msg.contains('SocketException') || msg.contains('Connection reset') || msg.contains('Failed host')) {
+        throw Exception('Sem conexão com a internet.');
+      }
+      rethrow;
+    }
   }
 
-  void _retry() => setState(() => _future = _fetchApod());
+  // Correção: não usar arrow function para evitar que setState receba um Future
+  void _retry() {
+    setState(() {
+      _future = _fetchApod();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -179,12 +194,24 @@ class _IssCardState extends State<_IssCard> {
   }
 
   Future<IssPassTime> _fetchAndSchedule() async {
-    final pass = await IssService.nextPass();
-    NotificationService.scheduleIssPass(pass.time).catchError((_) {});
-    return pass;
+    try {
+      final pass = await IssService.nextPass();
+      NotificationService.scheduleIssPass(pass.time).catchError((_) {});
+      return pass;
+    } on Exception catch (e) {
+      final msg = e.toString();
+      if (msg.contains('Connection reset') || msg.contains('SocketException') || msg.contains('Failed host')) {
+        throw Exception('Sem conexão. Verifique sua internet.');
+      }
+      rethrow;
+    }
   }
 
-  void _retry() => setState(() => _future = _fetchAndSchedule());
+  void _retry() {
+    setState(() {
+      _future = _fetchAndSchedule();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -205,9 +232,14 @@ class _IssCardState extends State<_IssCard> {
               isLoading
                   ? 'Calculando próxima passagem...'
                   : hasError
-                      ? snapshot.error.toString().replaceFirst('Exception: ', '')
+                      ? snapshot.error
+                          .toString()
+                          .replaceAll('Exception: ', '')
                       : snapshot.data!.label,
-              style: hasError ? const TextStyle(color: Colors.redAccent) : null,
+              style: hasError
+                  ? const TextStyle(color: Colors.redAccent, fontSize: 12)
+                  : null,
+              maxLines: 2,
             ),
             trailing: isLoading
                 ? const SizedBox(
@@ -299,7 +331,11 @@ class _RecentObservationsState extends State<_RecentObservations> {
                         ),
                       ),
                       TextButton(
-                        onPressed: () => setState(() => _future = _fetch()),
+                        onPressed: () {
+                          setState(() {
+                            _future = _fetch();
+                          });
+                        },
                         child: const Text('Tentar'),
                       ),
                     ],

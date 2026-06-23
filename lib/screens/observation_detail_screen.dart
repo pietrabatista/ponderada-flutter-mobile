@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart' show Share;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/observation_model.dart';
 
 class ObservationDetailScreen extends StatelessWidget {
@@ -61,6 +62,10 @@ class ObservationDetailScreen extends StatelessWidget {
                   ? Image.network(
                       observation.fotoUrl!,
                       fit: BoxFit.cover,
+                      headers: {
+                        'Authorization':
+                            'Bearer ${Supabase.instance.client.auth.currentSession?.accessToken ?? ''}',
+                      },
                       errorBuilder: (_, __, ___) => _photoPlaceholder(),
                     )
                   : _photoPlaceholder(),

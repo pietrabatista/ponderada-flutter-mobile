@@ -5,6 +5,32 @@ import 'package:path/path.dart' as p;
 class ObservationService {
   static final _client = Supabase.instance.client;
 
+  /// Exclui uma observação do banco e a foto do Storage.
+  static Future<void> delete(String id, String? fotoUrl) async {
+    // 1. Deleta o registro do banco
+    await _client.from('observations').delete().eq('id', id);
+
+    // 2. Remove a foto do Storage (extrai o path do URL)
+    if (fotoUrl != null && fotoUrl.isNotEmpty) {
+      try {
+        // URL format: .../object/public/observation-photos/{userId}/{file}
+        // ou         .../object/sign/observation-photos/{userId}/{file}
+        final uri = Uri.parse(fotoUrl);
+        final segments = uri.pathSegments;
+        final bucketIdx = segments.indexOf('observation-photos');
+        if (bucketIdx != -1 && bucketIdx + 1 < segments.length) {
+          final storagePath =
+              segments.sublist(bucketIdx + 1).join('/');
+          await _client.storage
+              .from('observation-photos')
+              .remove([storagePath]);
+        }
+      } catch (_) {
+        // Falha ao deletar storage não impede o fluxo
+      }
+    }
+  }
+
   static Future<void> save({
     required File photoFile,
     required String titulo,

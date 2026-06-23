@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/observation_model.dart';
+import '../services/observation_service.dart';
 import 'observation_detail_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -76,6 +77,53 @@ class _HistoryScreenState extends State<HistoryScreen> {
         _dateRange = range;
         _applyFilters();
       });
+    }
+  }
+
+  Future<bool?> _confirmDelete(ObservationModel obs) async {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir registro?'),
+        content: Text(
+            'Tem certeza que deseja excluir "${obs.titulo}"? Esta ação não pode ser desfeita.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteObservation(ObservationModel obs) async {
+    try {
+      await ObservationService.delete(obs.id, obs.fotoUrl);
+      setState(() {
+        _all.removeWhere((o) => o.id == obs.id);
+        _applyFilters();
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Registro excluído.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Erro ao excluir: $e'),
+              backgroundColor: Colors.red),
+        );
+        // Recarrega para restaurar estado consistente
+        _fetch();
+      }
     }
   }
 
@@ -200,16 +248,43 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             child: ListView.builder(
                               padding: const EdgeInsets.all(12),
                               itemCount: _filtered.length,
-                              itemBuilder: (_, i) => _ObservationTile(
-                                observation: _filtered[i],
-                                onTap: () => Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => ObservationDetailScreen(
-                                      observation: _filtered[i],
+                              itemBuilder: (_, i) {
+                                final obs = _filtered[i];
+                                return Dismissible(
+                                  key: ValueKey(obs.id),
+                                  direction: DismissDirection.endToStart,
+                                  background: Container(
+                                    alignment: Alignment.centerRight,
+                                    padding: const EdgeInsets.only(right: 20),
+                                    margin: const EdgeInsets.only(bottom: 10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.shade700,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(Icons.delete_outline,
+                                        color: Colors.white, size: 28),
+                                  ),
+                                  confirmDismiss: (_) => _confirmDelete(obs),
+                                  onDismissed: (_) => _deleteObservation(obs),
+                                  child: _ObservationTile(
+                                    observation: obs,
+                                    onTap: () => Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => ObservationDetailScreen(
+                                          observation: obs,
+                                        ),
+                                      ),
+                                    ),
+                                    onDelete: () => _confirmDelete(obs).then(
+                                      (confirmed) {
+                                        if (confirmed == true) {
+                                          _deleteObservation(obs);
+                                        }
+                                      },
                                     ),
                                   ),
-                                ),
-                              ),
+                                );
+                              },
                             ),
                           ),
           ),
@@ -224,8 +299,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
 class _ObservationTile extends StatelessWidget {
   final ObservationModel observation;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
 
-  const _ObservationTile({required this.observation, required this.onTap});
+  const _ObservationTile({
+    required this.observation,
+    required this.onTap,
+    this.onDelete,
+  });
+
+  Map<String, String> get _authHeaders {
+    final token =
+        Supabase.instance.client.auth.currentSession?.accessToken ?? '';
+    return {'Authorization': 'Bearer $token'};
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -241,13 +327,27 @@ class _ObservationTile extends StatelessWidget {
                   width: 56,
                   height: 56,
                   fit: BoxFit.cover,
+                  headers: _authHeaders,
                   errorBuilder: (_, __, ___) => _placeholder(),
                 )
               : _placeholder(),
         ),
-        title: Text(observation.titulo, style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(observation.titulo,
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text(_fmt(observation.data)),
-        trailing: const Icon(Icons.chevron_right),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.chevron_right),
+            if (onDelete != null)
+              IconButton(
+                icon: const Icon(Icons.delete_outline,
+                    color: Colors.redAccent, size: 20),
+                tooltip: 'Excluir',
+                onPressed: onDelete,
+              ),
+          ],
+        ),
       ),
     );
   }

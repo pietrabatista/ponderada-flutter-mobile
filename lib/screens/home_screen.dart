@@ -401,6 +401,10 @@ class _RecentObservationsState extends State<_RecentObservations> {
                                   width: 48,
                                   height: 48,
                                   fit: BoxFit.cover,
+                                  headers: {
+                                    'Authorization':
+                                        'Bearer ${Supabase.instance.client.auth.currentSession?.accessToken ?? ''}',
+                                  },
                                   errorBuilder: (_, __, ___) => _photoPlaceholder(),
                                 )
                               : _photoPlaceholder(),

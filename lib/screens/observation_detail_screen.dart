@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart' show Share;
 import '../models/observation_model.dart';
 
 class ObservationDetailScreen extends StatelessWidget {
@@ -19,6 +20,20 @@ class ObservationDetailScreen extends StatelessWidget {
     return '${observation.lat!.toStringAsFixed(5)}, ${observation.long!.toStringAsFixed(5)}';
   }
 
+  String get _shareText {
+    return 'Vi ${observation.titulo} em $_formattedDate! via Diário do Céu ✨';
+  }
+
+  Future<void> _share(BuildContext context) async {
+    final box = context.findRenderObject() as RenderBox?;
+    final origin = box == null ? null : box.localToGlobal(Offset.zero) & box.size;
+    await Share.share(
+      _shareText,
+      subject: observation.titulo,
+      sharePositionOrigin: origin,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -28,6 +43,13 @@ class ObservationDetailScreen extends StatelessWidget {
           SliverAppBar(
             expandedHeight: 320,
             pinned: true,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.share),
+                tooltip: 'Compartilhar',
+                onPressed: () => _share(context),
+              ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               title: Text(
                 observation.titulo,

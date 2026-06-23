@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_screen.dart';
+import 'new_observation_screen.dart';
 import '../models/apod_model.dart';
 import '../services/nasa_service.dart';
 import '../services/iss_service.dart';
@@ -38,7 +39,9 @@ class HomeScreen extends StatelessWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {},
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const NewObservationScreen()),
+        ),
         tooltip: 'Novo registro',
         child: const Icon(Icons.add),
       ),

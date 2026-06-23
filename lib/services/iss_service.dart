@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
 
 class IssPassTime {
-  final DateTime? time; // null quando só temos posição atual (fallback)
+  final DateTime? time;
   final String? currentLat;
   final String? currentLon;
   final bool isFallback;
@@ -16,7 +16,7 @@ class IssPassTime {
     this.isFallback = false,
   });
 
-  /// Tempo restante até a passagem (atualizado em tempo real).
+  /// Countdown atualizado em tempo real (recalcula a cada chamada).
   String get countdown {
     if (time == null) return '';
     final diff = time!.difference(DateTime.now());
@@ -32,7 +32,7 @@ class IssPassTime {
     if (isFallback && currentLat != null) {
       return 'Posição atual: $currentLat°, $currentLon°\n(horário de passagem indisponível)';
     }
-    if (time == null) return 'Dados indisponíveis';
+    if (time == null) return 'Serviço temporariamente indisponível';
     final timeStr =
         '${time!.hour.toString().padLeft(2, '0')}:${time!.minute.toString().padLeft(2, '0')}';
     return 'Próxima passagem às $timeStr';
@@ -40,49 +40,53 @@ class IssPassTime {
 }
 
 class IssService {
+  // API principal de passagens (instável)
+  static const _passApi = 'http://api.open-notify.org/iss-pass.json';
+  // API de posição alternativa (mais estável)
+  static const _positionApi =
+      'https://api.wheretheiss.at/v1/satellites/25544';
+
   static Future<IssPassTime> nextPass() async {
-    Position? position;
+    // 1. Obtém localização do usuário
+    Position position;
     try {
       position = await _getPosition();
     } catch (e) {
       throw Exception('Permissão de localização negada ou GPS desativado.');
     }
 
-    // Tenta o endpoint de passagens
+    // 2. Tenta o endpoint de passagens
     try {
       final uri = Uri.parse(
-        'https://api.open-notify.org/iss-pass.json'
-        '?lat=${position.latitude}&lon=${position.longitude}&n=1',
-      );
+          '$_passApi?lat=${position.latitude}&lon=${position.longitude}&n=1');
       final response =
-          await http.get(uri).timeout(const Duration(seconds: 10));
+          await http.get(uri).timeout(const Duration(seconds: 8));
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body) as Map<String, dynamic>;
         final passes = json['response'] as List<dynamic>;
         if (passes.isNotEmpty) {
           final riseTime = passes[0]['risetime'] as int;
           return IssPassTime(
-              time: DateTime.fromMillisecondsSinceEpoch(riseTime * 1000));
+            time: DateTime.fromMillisecondsSinceEpoch(riseTime * 1000),
+          );
         }
       }
-    } on SocketException {
-      // Sem internet — propaga com mensagem clara
-      throw Exception('Sem conexão com a internet.');
     } catch (_) {
-      // Servidor rejeitou ou timeout — tenta fallback com posição atual
+      // Endpoint de passagens falhou (servidor fora, timeout, etc.)
+      // → vai tentar fallback abaixo
     }
 
-    // Fallback: mostra posição atual da ISS via iss-now (mais estável)
+    // 3. Fallback: posição atual via wheretheiss.at (API diferente e mais confiável)
     try {
-      final nowUri =
-          Uri.parse('http://api.open-notify.org/iss-now.json');
-      final nowResp =
-          await http.get(nowUri).timeout(const Duration(seconds: 8));
-      if (nowResp.statusCode == 200) {
-        final json = jsonDecode(nowResp.body) as Map<String, dynamic>;
-        final pos = json['iss_position'] as Map<String, dynamic>;
-        final lat = (double.parse(pos['latitude'].toString())).toStringAsFixed(2);
-        final lon = (double.parse(pos['longitude'].toString())).toStringAsFixed(2);
+      final uri = Uri.parse(_positionApi);
+      final response =
+          await http.get(uri).timeout(const Duration(seconds: 8));
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body) as Map<String, dynamic>;
+        final lat =
+            (json['latitude'] as num).toDouble().toStringAsFixed(2);
+        final lon =
+            (json['longitude'] as num).toDouble().toStringAsFixed(2);
         return IssPassTime(
           isFallback: true,
           currentLat: lat,
@@ -90,8 +94,11 @@ class IssService {
         );
       }
     } on SocketException {
+      // wheretheiss.at também falhou via SocketException → sem internet de fato
       throw Exception('Sem conexão com a internet.');
-    } catch (_) {}
+    } catch (_) {
+      // Outro erro no fallback
+    }
 
     throw Exception('Serviço de rastreamento da ISS temporariamente indisponível.');
   }
@@ -110,7 +117,8 @@ class IssService {
     }
 
     return Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.low),
+      locationSettings:
+          const LocationSettings(accuracy: LocationAccuracy.low),
     );
   }
 }

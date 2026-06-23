@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_screen.dart';
 import '../models/apod_model.dart';
 import '../services/nasa_service.dart';
+import '../services/iss_service.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -159,24 +160,54 @@ class _ApodCardState extends State<_ApodCard> {
   }
 }
 
-class _IssCard extends StatelessWidget {
+class _IssCard extends StatefulWidget {
   const _IssCard();
 
   @override
+  State<_IssCard> createState() => _IssCardState();
+}
+
+class _IssCardState extends State<_IssCard> {
+  late Future<IssPassTime> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = IssService.nextPass();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: const CircleAvatar(
-          backgroundColor: Colors.blueGrey,
-          child: Icon(Icons.rocket_launch_outlined, color: Colors.white),
-        ),
-        title: const Text('Estação Espacial Internacional'),
-        subtitle: const Text('Calculando próxima passagem...'),
-        trailing: Chip(
-          label: const Text('ISS'),
-          backgroundColor: Colors.blueGrey.shade800,
-        ),
-      ),
+    return FutureBuilder<IssPassTime>(
+      future: _future,
+      builder: (context, snapshot) {
+        final subtitle = snapshot.connectionState == ConnectionState.waiting
+            ? 'Calculando próxima passagem...'
+            : snapshot.hasError
+                ? snapshot.error.toString().replaceFirst('Exception: ', '')
+                : snapshot.data!.label;
+
+        return Card(
+          child: ListTile(
+            leading: const CircleAvatar(
+              backgroundColor: Colors.blueGrey,
+              child: Icon(Icons.rocket_launch_outlined, color: Colors.white),
+            ),
+            title: const Text('Estação Espacial Internacional'),
+            subtitle: Text(subtitle),
+            trailing: snapshot.connectionState == ConnectionState.waiting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Chip(
+                    label: const Text('ISS'),
+                    backgroundColor: Colors.blueGrey.shade800,
+                  ),
+          ),
+        );
+      },
     );
   }
 }

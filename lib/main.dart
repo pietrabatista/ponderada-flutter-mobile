@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/auth_screen.dart';
-import 'screens/home_screen.dart';
+import 'screens/main_screen.dart';
 import 'services/supabase_service.dart';
 
 const _supabaseUrl = 'https://kdtwzuseqalwoutzivch.supabase.co';
@@ -53,7 +53,7 @@ class DiarioDoCeuApp extends StatelessWidget {
       );
     } else {
       final session = Supabase.instance.client.auth.currentSession;
-      home = session != null ? const HomeScreen() : const AuthScreen();
+      home = session != null ? const MainScreen() : const AuthScreen();
     }
 
     return MaterialApp(

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'auth_screen.dart';
-import 'new_observation_screen.dart';
+import 'observation_detail_screen.dart';
 import '../models/apod_model.dart';
+import '../models/observation_model.dart';
 import '../services/nasa_service.dart';
 import '../services/iss_service.dart';
 import '../services/notification_service.dart';
@@ -15,19 +15,7 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Diário do Céu'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await Supabase.instance.client.auth.signOut();
-              if (context.mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const AuthScreen()),
-                );
-              }
-            },
-          ),
-        ],
+        centerTitle: false,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -39,16 +27,11 @@ class HomeScreen extends StatelessWidget {
           _RecentObservations(),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const NewObservationScreen()),
-        ),
-        tooltip: 'Novo registro',
-        child: const Icon(Icons.add),
-      ),
     );
   }
 }
+
+// ─── APOD Card ───────────────────────────────────────────────────────────────
 
 class _ApodCard extends StatefulWidget {
   const _ApodCard();
@@ -63,8 +46,17 @@ class _ApodCardState extends State<_ApodCard> {
   @override
   void initState() {
     super.initState();
-    _future = NasaService.fetchApod();
+    _future = _fetchApod();
   }
+
+  Future<ApodModel> _fetchApod() async {
+    final apod = await NasaService.fetchApod();
+    // Agenda notificação diária de APOD (respeitando preferência)
+    NotificationService.scheduleApodDaily().catchError((_) {});
+    return apod;
+  }
+
+  void _retry() => setState(() => _future = _fetchApod());
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +68,7 @@ class _ApodCardState extends State<_ApodCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildImage(snapshot),
+              _buildMedia(snapshot),
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
@@ -94,12 +86,21 @@ class _ApodCardState extends State<_ApodCard> {
                       snapshot.hasData
                           ? snapshot.data!.title
                           : snapshot.hasError
-                              ? 'Erro ao carregar'
+                              ? 'Não foi possível carregar'
                               : 'Carregando...',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
                     ),
+                    if (snapshot.hasError) ...[
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: _retry,
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: const Text('Tentar novamente'),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -110,22 +111,19 @@ class _ApodCardState extends State<_ApodCard> {
     );
   }
 
-  Widget _buildImage(AsyncSnapshot<ApodModel> snapshot) {
+  Widget _buildMedia(AsyncSnapshot<ApodModel> snapshot) {
     if (snapshot.connectionState == ConnectionState.waiting) {
-      return Container(
-        height: 200,
-        width: double.infinity,
-        color: Colors.indigo.shade900,
-        child: const Center(child: CircularProgressIndicator()),
-      );
+      return _mediaBox(child: const CircularProgressIndicator());
     }
     if (snapshot.hasError || !snapshot.hasData) {
-      return Container(
-        height: 200,
-        width: double.infinity,
-        color: Colors.indigo.shade900,
-        child: const Center(
-          child: Icon(Icons.broken_image_outlined, size: 64, color: Colors.white30),
+      return _mediaBox(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(Icons.cloud_off_outlined, size: 48, color: Colors.white30),
+            SizedBox(height: 8),
+            Text('Sem conexão', style: TextStyle(color: Colors.white38)),
+          ],
         ),
       );
     }
@@ -136,33 +134,33 @@ class _ApodCardState extends State<_ApodCard> {
         height: 200,
         width: double.infinity,
         fit: BoxFit.cover,
-        loadingBuilder: (_, child, progress) => progress == null
-            ? child
-            : Container(
-                height: 200,
-                color: Colors.indigo.shade900,
-                child: const Center(child: CircularProgressIndicator()),
-              ),
-        errorBuilder: (_, __, ___) => Container(
-          height: 200,
-          color: Colors.indigo.shade900,
-          child: const Center(
-            child: Icon(Icons.broken_image_outlined, size: 64, color: Colors.white30),
-          ),
-        ),
+        loadingBuilder: (_, child, progress) =>
+            progress == null ? child : _mediaBox(child: const CircularProgressIndicator()),
+        errorBuilder: (_, __, ___) =>
+            _mediaBox(child: const Icon(Icons.broken_image_outlined, size: 64, color: Colors.white30)),
       );
     }
-    // vídeo (ex: YouTube) — exibe ícone
-    return Container(
-      height: 200,
-      width: double.infinity,
-      color: Colors.indigo.shade900,
-      child: const Center(
-        child: Icon(Icons.play_circle_outline, size: 64, color: Colors.white54),
+    return _mediaBox(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: const [
+          Icon(Icons.play_circle_outline, size: 64, color: Colors.white54),
+          SizedBox(height: 8),
+          Text('Vídeo disponível', style: TextStyle(color: Colors.white38)),
+        ],
       ),
     );
   }
+
+  Widget _mediaBox({required Widget child}) => Container(
+        height: 200,
+        width: double.infinity,
+        color: Colors.indigo.shade900,
+        child: Center(child: child),
+      );
 }
+
+// ─── ISS Card ────────────────────────────────────────────────────────────────
 
 class _IssCard extends StatefulWidget {
   const _IssCard();
@@ -182,21 +180,19 @@ class _IssCardState extends State<_IssCard> {
 
   Future<IssPassTime> _fetchAndSchedule() async {
     final pass = await IssService.nextPass();
-    // Agenda notificação local silenciosamente (erros ignorados)
     NotificationService.scheduleIssPass(pass.time).catchError((_) {});
     return pass;
   }
+
+  void _retry() => setState(() => _future = _fetchAndSchedule());
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<IssPassTime>(
       future: _future,
       builder: (context, snapshot) {
-        final subtitle = snapshot.connectionState == ConnectionState.waiting
-            ? 'Calculando próxima passagem...'
-            : snapshot.hasError
-                ? snapshot.error.toString().replaceFirst('Exception: ', '')
-                : snapshot.data!.label;
+        final isLoading = snapshot.connectionState == ConnectionState.waiting;
+        final hasError = snapshot.hasError;
 
         return Card(
           child: ListTile(
@@ -205,17 +201,30 @@ class _IssCardState extends State<_IssCard> {
               child: Icon(Icons.rocket_launch_outlined, color: Colors.white),
             ),
             title: const Text('Estação Espacial Internacional'),
-            subtitle: Text(subtitle),
-            trailing: snapshot.connectionState == ConnectionState.waiting
+            subtitle: Text(
+              isLoading
+                  ? 'Calculando próxima passagem...'
+                  : hasError
+                      ? snapshot.error.toString().replaceFirst('Exception: ', '')
+                      : snapshot.data!.label,
+              style: hasError ? const TextStyle(color: Colors.redAccent) : null,
+            ),
+            trailing: isLoading
                 ? const SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : Chip(
-                    label: const Text('ISS'),
-                    backgroundColor: Colors.blueGrey.shade800,
-                  ),
+                : hasError
+                    ? IconButton(
+                        icon: const Icon(Icons.refresh),
+                        onPressed: _retry,
+                        tooltip: 'Tentar novamente',
+                      )
+                    : Chip(
+                        label: const Text('ISS'),
+                        backgroundColor: Colors.blueGrey.shade800,
+                      ),
           ),
         );
       },
@@ -223,8 +232,34 @@ class _IssCardState extends State<_IssCard> {
   }
 }
 
-class _RecentObservations extends StatelessWidget {
+// ─── Recent Observations ─────────────────────────────────────────────────────
+
+class _RecentObservations extends StatefulWidget {
   const _RecentObservations();
+
+  @override
+  State<_RecentObservations> createState() => _RecentObservationsState();
+}
+
+class _RecentObservationsState extends State<_RecentObservations> {
+  late Future<List<ObservationModel>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _fetch();
+  }
+
+  Future<List<ObservationModel>> _fetch() async {
+    final data = await Supabase.instance.client
+        .from('observations')
+        .select()
+        .order('data', ascending: false)
+        .limit(3);
+    return (data as List)
+        .map((e) => ObservationModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -241,15 +276,110 @@ class _RecentObservations extends StatelessWidget {
                 ),
           ),
         ),
-        ...List.generate(3, (i) => _ObservationPlaceholder(index: i)),
+        FutureBuilder<List<ObservationModel>>(
+          future: _future,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Column(
+                children: List.generate(3, (_) => const _SkeletonTile()),
+              );
+            }
+            if (snapshot.hasError) {
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: Colors.redAccent),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Erro ao carregar registros',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => setState(() => _future = _fetch()),
+                        child: const Text('Tentar'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+            final list = snapshot.data!;
+            if (list.isEmpty) {
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.nightlight_round, size: 40, color: Colors.white24),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Nenhum registro ainda.\nToque em + para começar!',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(color: Colors.white54),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+            return Column(
+              children: list
+                  .map(
+                    (obs) => Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ObservationDetailScreen(observation: obs),
+                          ),
+                        ),
+                        leading: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: obs.fotoUrl != null
+                              ? Image.network(
+                                  obs.fotoUrl!,
+                                  width: 48,
+                                  height: 48,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => _photoPlaceholder(),
+                                )
+                              : _photoPlaceholder(),
+                        ),
+                        title: Text(obs.titulo,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(_fmtDate(obs.data)),
+                        trailing: const Icon(Icons.chevron_right),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            );
+          },
+        ),
       ],
     );
   }
+
+  Widget _photoPlaceholder() => Container(
+        width: 48,
+        height: 48,
+        color: Colors.grey.shade800,
+        child: const Icon(Icons.photo, color: Colors.white30),
+      );
+
+  String _fmtDate(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 }
 
-class _ObservationPlaceholder extends StatelessWidget {
-  final int index;
-  const _ObservationPlaceholder({required this.index});
+class _SkeletonTile extends StatelessWidget {
+  const _SkeletonTile();
 
   @override
   Widget build(BuildContext context) {
@@ -263,7 +393,6 @@ class _ObservationPlaceholder extends StatelessWidget {
             color: Colors.grey.shade800,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Icon(Icons.photo, color: Colors.white30),
         ),
         title: Container(
           height: 14,

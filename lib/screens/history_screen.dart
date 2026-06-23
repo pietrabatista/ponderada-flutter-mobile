@@ -23,8 +23,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
     _fetch();
   }
 
+  String? _error;
+
   Future<void> _fetch() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final data = await Supabase.instance.client
           .from('observations')
@@ -33,15 +38,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
       final list = (data as List)
           .map((e) => ObservationModel.fromJson(e as Map<String, dynamic>))
           .toList();
-      setState(() {
-        _all = list;
-        _applyFilters();
-      });
+      if (mounted) {
+        setState(() {
+          _all = list;
+          _applyFilters();
+        });
+      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao carregar: $e'), backgroundColor: Colors.red),
-        );
+        setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -135,25 +140,78 @@ class _HistoryScreenState extends State<HistoryScreen> {
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : _filtered.isEmpty
-                    ? const Center(child: Text('Nenhum registro encontrado.'))
-                    : RefreshIndicator(
-                        onRefresh: _fetch,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.all(12),
-                          itemCount: _filtered.length,
-                          itemBuilder: (_, i) => _ObservationTile(
-                            observation: _filtered[i],
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => ObservationDetailScreen(
-                                  observation: _filtered[i],
+                : _error != null
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.cloud_off_outlined,
+                                  size: 56, color: Colors.white30),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Erro ao carregar registros',
+                                style: Theme.of(context).textTheme.titleMedium,
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _error!,
+                                style: const TextStyle(color: Colors.white38, fontSize: 12),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 20),
+                              FilledButton.icon(
+                                onPressed: _fetch,
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Tentar novamente'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : _filtered.isEmpty
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.nightlight_round,
+                                      size: 56, color: Colors.white24),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    _search.isNotEmpty || _dateRange != null
+                                        ? 'Nenhum registro\ncorresponde ao filtro.'
+                                        : 'Nenhum registro ainda.\nComece observando o céu! ✨',
+                                    textAlign: TextAlign.center,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyLarge
+                                        ?.copyWith(color: Colors.white54),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _fetch,
+                            child: ListView.builder(
+                              padding: const EdgeInsets.all(12),
+                              itemCount: _filtered.length,
+                              itemBuilder: (_, i) => _ObservationTile(
+                                observation: _filtered[i],
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => ObservationDetailScreen(
+                                      observation: _filtered[i],
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
           ),
         ],
       ),

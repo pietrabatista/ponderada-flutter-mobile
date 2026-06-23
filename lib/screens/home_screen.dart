@@ -5,6 +5,7 @@ import 'new_observation_screen.dart';
 import '../models/apod_model.dart';
 import '../services/nasa_service.dart';
 import '../services/iss_service.dart';
+import '../services/notification_service.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -176,7 +177,14 @@ class _IssCardState extends State<_IssCard> {
   @override
   void initState() {
     super.initState();
-    _future = IssService.nextPass();
+    _future = _fetchAndSchedule();
+  }
+
+  Future<IssPassTime> _fetchAndSchedule() async {
+    final pass = await IssService.nextPass();
+    // Agenda notificação local silenciosamente (erros ignorados)
+    NotificationService.scheduleIssPass(pass.time).catchError((_) {});
+    return pass;
   }
 
   @override

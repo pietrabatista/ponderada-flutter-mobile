@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
 import 'services/supabase_service.dart';
+
+const _supabaseUrl = 'https://kdtwzuseqalwoutzivch.supabase.co';
+const _supabaseAnonKey =
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtkdHd6dXNlcWFsd291dHppdmNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMDExMDUsImV4cCI6MjA5Nzc3NzEwNX0.MofiP_R1J8ANiKCWTO9hWPp07PPTXKXFfW7Eg4rp0i4';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   String? initError;
   try {
-    await dotenv.load();
     await SupabaseService.initialize(
-      url: dotenv.env['SUPABASE_URL']!,
-      anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+      url: _supabaseUrl,
+      anonKey: _supabaseAnonKey,
     );
   } catch (e) {
     initError = e.toString();

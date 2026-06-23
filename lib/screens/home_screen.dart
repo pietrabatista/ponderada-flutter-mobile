@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -12,7 +13,9 @@ import '../services/apod_cache_service.dart';
 import '../widgets/supabase_image.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+  final ValueNotifier<int>? refreshTrigger;
+
+  const HomeScreen({super.key, this.refreshTrigger});
 
   @override
   Widget build(BuildContext context) {
@@ -23,12 +26,12 @@ class HomeScreen extends StatelessWidget {
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
-        children: const [
-          _ApodCard(),
-          SizedBox(height: 16),
-          _IssCard(),
-          SizedBox(height: 16),
-          _RecentObservations(),
+        children: [
+          const _ApodCard(),
+          const SizedBox(height: 16),
+          const _IssCard(),
+          const SizedBox(height: 16),
+          _RecentObservations(refreshTrigger: refreshTrigger),
         ],
       ),
     );
@@ -264,6 +267,7 @@ class _IssCard extends StatefulWidget {
 
 class _IssCardState extends State<_IssCard> {
   late Future<IssPassTime> _future;
+  Timer? _countdownTimer;
 
   @override
   void initState() {
@@ -271,16 +275,28 @@ class _IssCardState extends State<_IssCard> {
     _future = _fetchAndSchedule();
   }
 
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
+  }
+
   Future<IssPassTime> _fetchAndSchedule() async {
     final pass = await IssService.nextPass();
-    // Só agenda notificação se tiver horário de passagem real
     if (pass.time != null) {
       NotificationService.scheduleIssPass(pass.time!).catchError((_) {});
+      // Atualiza o countdown a cada 30 segundos
+      _countdownTimer?.cancel();
+      _countdownTimer =
+          Timer.periodic(const Duration(seconds: 30), (_) {
+        if (mounted) setState(() {});
+      });
     }
     return pass;
   }
 
   void _retry() {
+    _countdownTimer?.cancel();
     setState(() {
       _future = _fetchAndSchedule();
     });
@@ -293,43 +309,79 @@ class _IssCardState extends State<_IssCard> {
       builder: (context, snapshot) {
         final isLoading = snapshot.connectionState == ConnectionState.waiting;
         final hasError = snapshot.hasError;
+        final pass = snapshot.data;
 
         return Card(
-          child: ListTile(
-            leading: const CircleAvatar(
-              backgroundColor: Colors.blueGrey,
-              child: Icon(Icons.rocket_launch_outlined, color: Colors.white),
-            ),
-            title: const Text('Estação Espacial Internacional'),
-            subtitle: Text(
-              isLoading
-                  ? 'Calculando próxima passagem...'
-                  : hasError
-                      ? snapshot.error
-                          .toString()
-                          .replaceAll('Exception: ', '')
-                      : snapshot.data!.label,
-              style: hasError
-                  ? const TextStyle(color: Colors.redAccent, fontSize: 12)
-                  : null,
-              maxLines: 2,
-            ),
-            trailing: isLoading
-                ? const SizedBox(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                const CircleAvatar(
+                  backgroundColor: Colors.blueGrey,
+                  child: Icon(Icons.rocket_launch_outlined, color: Colors.white),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Estação Espacial Internacional',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      if (isLoading)
+                        const Text('Calculando próxima passagem...',
+                            style: TextStyle(fontSize: 12, color: Colors.white54))
+                      else if (hasError)
+                        Text(
+                          snapshot.error.toString().replaceAll('Exception: ', ''),
+                          style: const TextStyle(fontSize: 12, color: Colors.redAccent),
+                          maxLines: 2,
+                        )
+                      else ...[
+                        Text(
+                          pass!.label,
+                          style: const TextStyle(fontSize: 12, color: Colors.white70),
+                          maxLines: 2,
+                        ),
+                        if (pass.countdown.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.blueGrey.shade700,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              pass.countdown,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ],
+                  ),
+                ),
+                if (isLoading)
+                  const SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : hasError
-                    ? IconButton(
-                        icon: const Icon(Icons.refresh),
-                        onPressed: _retry,
-                        tooltip: 'Tentar novamente',
-                      )
-                    : Chip(
-                        label: const Text('ISS'),
-                        backgroundColor: Colors.blueGrey.shade800,
-                      ),
+                else if (hasError)
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: _retry,
+                    tooltip: 'Tentar novamente',
+                  ),
+              ],
+            ),
           ),
         );
       },
@@ -340,7 +392,9 @@ class _IssCardState extends State<_IssCard> {
 // ─── Recent Observations ─────────────────────────────────────────────────────
 
 class _RecentObservations extends StatefulWidget {
-  const _RecentObservations();
+  final ValueNotifier<int>? refreshTrigger;
+
+  const _RecentObservations({this.refreshTrigger});
 
   @override
   State<_RecentObservations> createState() => _RecentObservationsState();
@@ -353,6 +407,19 @@ class _RecentObservationsState extends State<_RecentObservations> {
   void initState() {
     super.initState();
     _future = _fetch();
+    widget.refreshTrigger?.addListener(_onRefresh);
+  }
+
+  @override
+  void dispose() {
+    widget.refreshTrigger?.removeListener(_onRefresh);
+    super.dispose();
+  }
+
+  void _onRefresh() {
+    setState(() {
+      _future = _fetch();
+    });
   }
 
   Future<List<ObservationModel>> _fetch() async {

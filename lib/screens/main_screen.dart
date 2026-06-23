@@ -14,20 +14,20 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  /// Incrementar este notifier força a HistoryScreen a recarregar os dados.
-  final _historyRefresh = ValueNotifier<int>(0);
+  /// Incrementado sempre que uma observação é criada ou excluída.
+  /// Tanto HistoryScreen quanto HomeScreen (registros recentes) ouvem este notifier.
+  final _observationsRefresh = ValueNotifier<int>(0);
 
-  void _triggerHistoryRefresh() => _historyRefresh.value++;
+  void _onObservationsChanged() => _observationsRefresh.value++;
 
   void _onTap(int index) {
-    // Ao navegar para o Histórico, sempre recarrega
-    if (index == 1) _triggerHistoryRefresh();
+    if (index == 1) _onObservationsChanged(); // aba Histórico: sempre recarrega
     setState(() => _currentIndex = index);
   }
 
   @override
   void dispose() {
-    _historyRefresh.dispose();
+    _observationsRefresh.dispose();
     super.dispose();
   }
 
@@ -37,8 +37,11 @@ class _MainScreenState extends State<MainScreen> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          const HomeScreen(),
-          HistoryScreen(refreshTrigger: _historyRefresh),
+          HomeScreen(refreshTrigger: _observationsRefresh),
+          HistoryScreen(
+            refreshTrigger: _observationsRefresh,
+            onObservationChanged: _onObservationsChanged,
+          ),
           const ProfileScreen(),
         ],
       ),
@@ -49,8 +52,7 @@ class _MainScreenState extends State<MainScreen> {
                   MaterialPageRoute(
                       builder: (_) => const NewObservationScreen()),
                 );
-                // Ao voltar de criar um registro, atualiza o histórico
-                _triggerHistoryRefresh();
+                _onObservationsChanged(); // atualiza após criar
               },
               tooltip: 'Novo registro',
               child: const Icon(Icons.add),

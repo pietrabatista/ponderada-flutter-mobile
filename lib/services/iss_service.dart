@@ -16,16 +16,26 @@ class IssPassTime {
     this.isFallback = false,
   });
 
+  /// Tempo restante até a passagem (atualizado em tempo real).
+  String get countdown {
+    if (time == null) return '';
+    final diff = time!.difference(DateTime.now());
+    if (diff.isNegative) return 'Passou recentemente';
+    if (diff.inSeconds < 60) return 'Passando agora!';
+    if (diff.inMinutes < 60) return 'Em ${diff.inMinutes} min';
+    final h = diff.inHours;
+    final m = diff.inMinutes % 60;
+    return 'Em ${h}h ${m.toString().padLeft(2, '0')}min';
+  }
+
   String get label {
     if (isFallback && currentLat != null) {
-      return 'ISS agora em $currentLat°, $currentLon° (passagens indisponíveis)';
+      return 'Posição atual: $currentLat°, $currentLon°\n(horário de passagem indisponível)';
     }
     if (time == null) return 'Dados indisponíveis';
-    final now = DateTime.now();
-    final diff = time!.difference(now);
-    if (diff.isNegative) return 'Passou recentemente';
-    if (diff.inMinutes < 60) return 'ISS passa em ${diff.inMinutes} min';
-    return 'ISS passa às ${time!.hour.toString().padLeft(2, '0')}:${time!.minute.toString().padLeft(2, '0')}';
+    final timeStr =
+        '${time!.hour.toString().padLeft(2, '0')}:${time!.minute.toString().padLeft(2, '0')}';
+    return 'Próxima passagem às $timeStr';
   }
 }
 

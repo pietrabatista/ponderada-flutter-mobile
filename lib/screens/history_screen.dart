@@ -7,8 +7,9 @@ import 'observation_detail_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
   final ValueNotifier<int>? refreshTrigger;
+  final VoidCallback? onObservationChanged;
 
-  const HistoryScreen({super.key, this.refreshTrigger});
+  const HistoryScreen({super.key, this.refreshTrigger, this.onObservationChanged});
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -121,6 +122,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         _all.removeWhere((o) => o.id == obs.id);
         _applyFilters();
       });
+      // Notifica MainScreen para que HomeScreen também atualize os recentes
+      widget.onObservationChanged?.call();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Registro excluído.')),

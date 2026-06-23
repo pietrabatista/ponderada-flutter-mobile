@@ -5,7 +5,9 @@ import '../services/observation_service.dart';
 import 'observation_detail_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+  final ValueNotifier<int>? refreshTrigger;
+
+  const HistoryScreen({super.key, this.refreshTrigger});
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -22,7 +24,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
   void initState() {
     super.initState();
     _fetch();
+    widget.refreshTrigger?.addListener(_onRefreshTriggered);
   }
+
+  @override
+  void dispose() {
+    widget.refreshTrigger?.removeListener(_onRefreshTriggered);
+    super.dispose();
+  }
+
+  void _onRefreshTriggered() => _fetch();
 
   String? _error;
 

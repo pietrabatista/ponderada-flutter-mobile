@@ -14,27 +14,44 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  // IndexedStack mantém o estado de cada aba
-  final List<Widget> _pages = const [
-    HomeScreen(),
-    HistoryScreen(),
-    ProfileScreen(),
-  ];
+  /// Incrementar este notifier força a HistoryScreen a recarregar os dados.
+  final _historyRefresh = ValueNotifier<int>(0);
 
-  void _onTap(int index) => setState(() => _currentIndex = index);
+  void _triggerHistoryRefresh() => _historyRefresh.value++;
+
+  void _onTap(int index) {
+    // Ao navegar para o Histórico, sempre recarrega
+    if (index == 1) _triggerHistoryRefresh();
+    setState(() => _currentIndex = index);
+  }
+
+  @override
+  void dispose() {
+    _historyRefresh.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: _pages,
+        children: [
+          const HomeScreen(),
+          HistoryScreen(refreshTrigger: _historyRefresh),
+          const ProfileScreen(),
+        ],
       ),
       floatingActionButton: _currentIndex == 0
           ? FloatingActionButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const NewObservationScreen()),
-              ),
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => const NewObservationScreen()),
+                );
+                // Ao voltar de criar um registro, atualiza o histórico
+                _triggerHistoryRefresh();
+              },
               tooltip: 'Novo registro',
               child: const Icon(Icons.add),
             )

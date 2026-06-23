@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'observation_detail_screen.dart';
@@ -6,6 +7,7 @@ import '../models/observation_model.dart';
 import '../services/nasa_service.dart';
 import '../services/iss_service.dart';
 import '../services/notification_service.dart';
+import '../services/apod_cache_service.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -40,42 +42,39 @@ class _ApodCard extends StatefulWidget {
   State<_ApodCard> createState() => _ApodCardState();
 }
 
+// Agrupamento do model + arquivo local da imagem
+class _ApodData {
+  final ApodModel apod;
+  final File? localImage; // null = sem cache de imagem local
+  const _ApodData(this.apod, this.localImage);
+}
+
 class _ApodCardState extends State<_ApodCard> {
-  late Future<ApodModel> _future;
+  late Future<_ApodData> _future;
 
   @override
   void initState() {
     super.initState();
-    _future = _fetchApod();
+    _future = _load();
   }
 
-  Future<ApodModel> _fetchApod() async {
-    try {
-      final apod = await NasaService.fetchApod();
-      NotificationService.scheduleApodDaily().catchError((_) {});
-      return apod;
-    } on Exception catch (e) {
-      final msg = e.toString();
-      if (msg.contains('503') || msg.contains('429')) {
-        throw Exception('NASA API temporariamente indisponível. Tente mais tarde.');
-      }
-      if (msg.contains('SocketException') || msg.contains('Connection reset') || msg.contains('Failed host')) {
-        throw Exception('Sem conexão com a internet.');
-      }
-      rethrow;
-    }
+  Future<_ApodData> _load() async {
+    final apod = await NasaService.fetchApod();
+    NotificationService.scheduleApodDaily().catchError((_) {});
+    // Tenta carregar imagem local (pode não existir ainda se acabou de baixar)
+    final localFile = await ApodCacheService.localImageFile();
+    return _ApodData(apod, localFile);
   }
 
-  // Correção: não usar arrow function para evitar que setState receba um Future
   void _retry() {
     setState(() {
-      _future = _fetchApod();
+      _future = _load();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<ApodModel>(
+    return FutureBuilder<_ApodData>(
       future: _future,
       builder: (context, snapshot) {
         return Card(
@@ -99,7 +98,7 @@ class _ApodCardState extends State<_ApodCard> {
                     const SizedBox(height: 4),
                     Text(
                       snapshot.hasData
-                          ? snapshot.data!.title
+                          ? snapshot.data!.apod.title
                           : snapshot.hasError
                               ? 'Não foi possível carregar'
                               : 'Carregando...',
@@ -126,7 +125,7 @@ class _ApodCardState extends State<_ApodCard> {
     );
   }
 
-  Widget _buildMedia(AsyncSnapshot<ApodModel> snapshot) {
+  Widget _buildMedia(AsyncSnapshot<_ApodData> snapshot) {
     if (snapshot.connectionState == ConnectionState.waiting) {
       return _mediaBox(child: const CircularProgressIndicator());
     }
@@ -142,30 +141,48 @@ class _ApodCardState extends State<_ApodCard> {
         ),
       );
     }
-    final apod = snapshot.data!;
-    if (apod.mediaType == 'image') {
-      return Image.network(
-        apod.url,
+
+    final data = snapshot.data!;
+    final apod = data.apod;
+
+    if (apod.mediaType != 'image') {
+      return _mediaBox(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(Icons.play_circle_outline, size: 64, color: Colors.white54),
+            SizedBox(height: 8),
+            Text('Vídeo disponível', style: TextStyle(color: Colors.white38)),
+          ],
+        ),
+      );
+    }
+
+    // Preferência: arquivo local → fallback para URL da rede
+    if (data.localImage != null) {
+      return Image.file(
+        data.localImage!,
+        height: 200,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _networkImage(apod.url),
+      );
+    }
+
+    return _networkImage(apod.url);
+  }
+
+  Widget _networkImage(String url) => Image.network(
+        url,
         height: 200,
         width: double.infinity,
         fit: BoxFit.cover,
         loadingBuilder: (_, child, progress) =>
             progress == null ? child : _mediaBox(child: const CircularProgressIndicator()),
-        errorBuilder: (_, __, ___) =>
-            _mediaBox(child: const Icon(Icons.broken_image_outlined, size: 64, color: Colors.white30)),
+        errorBuilder: (_, __, ___) => _mediaBox(
+          child: const Icon(Icons.broken_image_outlined, size: 64, color: Colors.white30),
+        ),
       );
-    }
-    return _mediaBox(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: const [
-          Icon(Icons.play_circle_outline, size: 64, color: Colors.white54),
-          SizedBox(height: 8),
-          Text('Vídeo disponível', style: TextStyle(color: Colors.white38)),
-        ],
-      ),
-    );
-  }
 
   Widget _mediaBox({required Widget child}) => Container(
         height: 200,

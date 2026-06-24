@@ -226,6 +226,9 @@ class NotificationService {
     );
   }
 
+  /// Reseta o cooldown de proximidade (útil para testes de debug).
+  static void resetProximityCooldown() => _lastProximityNotif = null;
+
   static double _haversineKm(
       double lat1, double lon1, double lat2, double lon2) {
     const r = 6371.0;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/notification_service.dart';
+import '../services/iss_service.dart';
 import 'auth_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -193,6 +194,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         );
                       }
+                    },
+                  ),
+                ),
+
+                Card(
+                  child: ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: Colors.orange,
+                      child: Icon(Icons.location_on,
+                          color: Colors.white, size: 20),
+                    ),
+                    title: const Text('Simular ISS sobre SP (10s)'),
+                    subtitle: const Text(
+                        'Força posição da ISS para São Paulo e reseta cooldown'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      NotificationService.resetProximityCooldown();
+                      IssService.forceSpLocation();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                              '📍 ISS forçada para SP por 10s — aguarde a notificação'),
+                          duration: Duration(seconds: 4),
+                        ),
+                      );
                     },
                   ),
                 ),

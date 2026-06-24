@@ -50,7 +50,25 @@ class IssService {
   static DateTime? _positionCacheTime;
   static const _positionCacheDuration = Duration(minutes: 2);
 
+  // Override de depuração: força posição de SP por N segundos
+  static DateTime? _forcedSpUntil;
+
+  /// Força a posição da ISS para São Paulo durante [duration].
+  static void forceSpLocation({Duration duration = const Duration(seconds: 10)}) {
+    _forcedSpUntil = DateTime.now().add(duration);
+    debugPrint('[ISS] 🛠 Override SP ativado por ${duration.inSeconds}s');
+  }
+
   static Future<IssPassTime> nextPass() async {
+    // Override de debug: retorna coords de SP sem chamar a API
+    if (_forcedSpUntil != null && DateTime.now().isBefore(_forcedSpUntil!)) {
+      debugPrint('[ISS] 🛠 Override SP ativo — retornando lat=-23.55 lon=-46.63');
+      return const IssPassTime(
+        isFallback: true,
+        currentLat: '-23.55',
+        currentLon: '-46.63',
+      );
+    }
     debugPrint('[ISS] === Buscando posição ===');
 
     // 1. GPS (cacheado 2 min)

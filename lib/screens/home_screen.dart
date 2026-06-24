@@ -396,6 +396,7 @@ class _IssCardState extends State<_IssCard> {
       setState(() => _current = pass);
       _scheduleIssNotification(pass);
       _geocode(pass);
+      _checkProximity(pass);
       _startRefreshTimer();
     }
     return pass;
@@ -410,10 +411,19 @@ class _IssCardState extends State<_IssCard> {
         if (!mounted) return;
         setState(() => _current = pass);
         _geocode(pass);
+        _checkProximity(pass);
       } catch (_) {
         // Mantém o último dado bom em caso de falha transitória
       }
     });
+  }
+
+  void _checkProximity(IssPassTime pass) {
+    if (pass.currentLat == null || pass.currentLon == null) return;
+    final lat = double.tryParse(pass.currentLat!);
+    final lon = double.tryParse(pass.currentLon!);
+    if (lat == null || lon == null) return;
+    NotificationService.checkIssProximity(lat, lon).catchError((_) {});
   }
 
   void _geocode(IssPassTime pass) {
@@ -421,7 +431,9 @@ class _IssCardState extends State<_IssCard> {
     final now = DateTime.now();
     // Throttle: no máximo 1 requisição a cada 30s
     if (_lastGeoTime != null &&
-        now.difference(_lastGeoTime!) < const Duration(seconds: 30)) return;
+        now.difference(_lastGeoTime!) < const Duration(seconds: 30)) {
+      return;
+    }
     _lastGeoTime = now;
     final lat = double.tryParse(pass.currentLat!) ?? 0;
     final lon = double.tryParse(pass.currentLon!) ?? 0;

@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
@@ -10,6 +11,14 @@ class NotificationService {
   static const _issNotifId = 1;
   static const _apodNotifId = 2;
   static const _testNotifId = 99;
+  static const _issProximityNotifId = 3;
+
+  // Coordenadas de São Paulo
+  static const _spLat = -23.5505;
+  static const _spLon = -46.6333;
+  static const _proximityRadiusKm = 100.0;
+  static const _proximityCooldown = Duration(minutes: 10);
+  static DateTime? _lastProximityNotif;
 
   static const _issChannelId = 'iss_channel';
   static const _apodChannelId = 'apod_channel';
@@ -178,6 +187,56 @@ class NotificationService {
     await initialize();
     await _plugin.cancel(_apodNotifId);
   }
+
+  // ─── Proximidade ISS / São Paulo ────────────────────────────────────────────
+
+  /// Verifica se a ISS está a ≤100 km de São Paulo e dispara notificação
+  /// (máx uma a cada 10 minutos para não spammar).
+  static Future<void> checkIssProximity(double issLat, double issLon) async {
+    final distKm = _haversineKm(issLat, issLon, _spLat, _spLon);
+    if (distKm > _proximityRadiusKm) return;
+
+    final now = DateTime.now();
+    if (_lastProximityNotif != null &&
+        now.difference(_lastProximityNotif!) < _proximityCooldown) {
+      return;
+    }
+    _lastProximityNotif = now;
+
+    await initialize();
+    await _plugin.show(
+      _issProximityNotifId,
+      '🛸 ISS sobre São Paulo!',
+      'A Estação Espacial Internacional está a ${distKm.toStringAsFixed(0)} km de São Paulo. Olhe para o céu! 🔭',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _issChannelId,
+          'Passagem da ISS',
+          channelDescription: 'Notificações de passagem da ISS',
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+    );
+  }
+
+  static double _haversineKm(
+      double lat1, double lon1, double lat2, double lon2) {
+    const r = 6371.0;
+    final dLat = _toRad(lat2 - lat1);
+    final dLon = _toRad(lon2 - lon1);
+    final a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(_toRad(lat1)) * cos(_toRad(lat2)) * sin(dLon / 2) * sin(dLon / 2);
+    return r * 2 * atan2(sqrt(a), sqrt(1 - a));
+  }
+
+  static double _toRad(double deg) => deg * pi / 180;
 
   // ─── Teste ──────────────────────────────────────────────────────────────────
 

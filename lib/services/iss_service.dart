@@ -1,22 +1,44 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
+
+/// Entrada de log do fluxo ISS para exibição visual.
+class IssLogEntry {
+  final String step;
+  final String detail;
+  final bool ok;
+  final Duration? elapsed;
+
+  const IssLogEntry({
+    required this.step,
+    required this.detail,
+    required this.ok,
+    this.elapsed,
+  });
+
+  @override
+  String toString() =>
+      '[ISS] ${ok ? "✓" : "✗"} $step${elapsed != null ? " (${elapsed!.inMilliseconds}ms)" : ""}: $detail';
+}
 
 class IssPassTime {
   final DateTime? time;
   final String? currentLat;
   final String? currentLon;
   final bool isFallback;
+  final List<IssLogEntry> logs;
 
   const IssPassTime({
     this.time,
     this.currentLat,
     this.currentLon,
     this.isFallback = false,
+    this.logs = const [],
   });
 
-  /// Countdown atualizado em tempo real (recalcula a cada chamada).
   String get countdown {
     if (time == null) return '';
     final diff = time!.difference(DateTime.now());
@@ -40,67 +62,132 @@ class IssPassTime {
 }
 
 class IssService {
-  // API principal de passagens (instável)
-  static const _passApi = 'http://api.open-notify.org/iss-pass.json';
-  // API de posição alternativa (mais estável)
-  static const _positionApi =
-      'https://api.wheretheiss.at/v1/satellites/25544';
+  // API de posição atual — open-notify (rápida, ~400ms)
+  static const _nowApi = 'http://api.open-notify.org/iss-now.json';
+  // Fallback de posição — wheretheiss.at (lenta ~12s)
+  static const _positionApi = 'https://api.wheretheiss.at/v1/satellites/25544';
+
+  static const _timeout = Duration(seconds: 20);
 
   static Future<IssPassTime> nextPass() async {
-    // 1. Obtém localização do usuário
+    final logs = <IssLogEntry>[];
+
+    void log(IssLogEntry entry) {
+      logs.add(entry);
+      debugPrint(entry.toString());
+    }
+
+    debugPrint('[ISS] === Iniciando busca de passagem da ISS ===');
+
+    // 1. Localização
+    final t0 = DateTime.now();
     Position position;
     try {
       position = await _getPosition();
+      final elapsed = DateTime.now().difference(t0);
+      log(IssLogEntry(
+        step: 'GPS',
+        detail: 'lat=${position.latitude.toStringAsFixed(4)}, lon=${position.longitude.toStringAsFixed(4)}',
+        ok: true,
+        elapsed: elapsed,
+      ));
     } catch (e) {
+      log(IssLogEntry(step: 'GPS', detail: e.toString(), ok: false));
       throw Exception('Permissão de localização negada ou GPS desativado.');
     }
 
-    // 2. Tenta o endpoint de passagens
+    // 2. Posição atual via open-notify/iss-now.json (rápida, ~400ms)
+    final t1 = DateTime.now();
     try {
-      final uri = Uri.parse(
-          '$_passApi?lat=${position.latitude}&lon=${position.longitude}&n=1');
-      final response =
-          await http.get(uri).timeout(const Duration(seconds: 8));
+      final uri = Uri.parse(_nowApi);
+      debugPrint('[ISS] → GET $uri');
+      final response = await http.get(uri).timeout(_timeout);
+      final elapsed = DateTime.now().difference(t1);
+      debugPrint('[ISS] ← HTTP ${response.statusCode} (${elapsed.inMilliseconds}ms) body: ${response.body}');
+
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body) as Map<String, dynamic>;
-        final passes = json['response'] as List<dynamic>;
-        if (passes.isNotEmpty) {
-          final riseTime = passes[0]['risetime'] as int;
+        if (json['message'] == 'success') {
+          final pos = json['iss_position'] as Map<String, dynamic>;
+          final lat = double.parse(pos['latitude'] as String).toStringAsFixed(2);
+          final lon = double.parse(pos['longitude'] as String).toStringAsFixed(2);
+          log(IssLogEntry(
+            step: 'open-notify/iss-now',
+            detail: 'Posição atual: lat=$lat, lon=$lon',
+            ok: true,
+            elapsed: elapsed,
+          ));
           return IssPassTime(
-            time: DateTime.fromMillisecondsSinceEpoch(riseTime * 1000),
+            isFallback: true,
+            currentLat: lat,
+            currentLon: lon,
+            logs: List.unmodifiable(logs),
           );
+        } else {
+          log(IssLogEntry(step: 'open-notify/iss-now', detail: 'message=${json["message"]}', ok: false, elapsed: elapsed));
         }
+      } else {
+        log(IssLogEntry(
+          step: 'open-notify/iss-now',
+          detail: 'HTTP ${response.statusCode}',
+          ok: false,
+          elapsed: elapsed,
+        ));
       }
-    } catch (_) {
-      // Endpoint de passagens falhou (servidor fora, timeout, etc.)
-      // → vai tentar fallback abaixo
+    } catch (e) {
+      final elapsed = DateTime.now().difference(t1);
+      log(IssLogEntry(step: 'open-notify/iss-now', detail: '${e.runtimeType}: $e', ok: false, elapsed: elapsed));
     }
 
-    // 3. Fallback: posição atual via wheretheiss.at (API diferente e mais confiável)
+    // 3. Fallback: posição atual via wheretheiss.at
+    final t2 = DateTime.now();
     try {
       final uri = Uri.parse(_positionApi);
-      final response =
-          await http.get(uri).timeout(const Duration(seconds: 8));
+      debugPrint('[ISS] → GET $uri (timeout: ${_timeout.inSeconds}s)');
+      final response = await http.get(uri).timeout(_timeout);
+      final elapsed = DateTime.now().difference(t2);
+      debugPrint('[ISS] ← HTTP ${response.statusCode} (${elapsed.inMilliseconds}ms) body: ${response.body.substring(0, response.body.length.clamp(0, 200))}');
+
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body) as Map<String, dynamic>;
-        final lat =
-            (json['latitude'] as num).toDouble().toStringAsFixed(2);
-        final lon =
-            (json['longitude'] as num).toDouble().toStringAsFixed(2);
+        final lat = (json['latitude'] as num).toDouble().toStringAsFixed(2);
+        final lon = (json['longitude'] as num).toDouble().toStringAsFixed(2);
+        log(IssLogEntry(
+          step: 'wheretheiss.at',
+          detail: 'Posição atual: lat=$lat, lon=$lon',
+          ok: true,
+          elapsed: elapsed,
+        ));
         return IssPassTime(
           isFallback: true,
           currentLat: lat,
           currentLon: lon,
+          logs: List.unmodifiable(logs),
         );
+      } else {
+        log(IssLogEntry(
+          step: 'wheretheiss.at',
+          detail: 'HTTP ${response.statusCode}',
+          ok: false,
+          elapsed: elapsed,
+        ));
       }
-    } on SocketException {
-      // wheretheiss.at também falhou via SocketException → sem internet de fato
+    } on TimeoutException catch (e) {
+      final elapsed = DateTime.now().difference(t2);
+      log(IssLogEntry(step: 'wheretheiss.at', detail: 'Timeout após ${elapsed.inSeconds}s: $e', ok: false, elapsed: elapsed));
+    } on SocketException catch (e) {
+      log(IssLogEntry(step: 'wheretheiss.at', detail: 'Sem internet: $e', ok: false));
       throw Exception('Sem conexão com a internet.');
-    } catch (_) {
-      // Outro erro no fallback
+    } catch (e) {
+      final elapsed = DateTime.now().difference(t2);
+      log(IssLogEntry(step: 'wheretheiss.at', detail: '${e.runtimeType}: $e', ok: false, elapsed: elapsed));
     }
 
-    throw Exception('Serviço de rastreamento da ISS temporariamente indisponível.');
+    debugPrint('[ISS] === Todas as APIs falharam ===');
+    throw IssException(
+      'Serviço de rastreamento da ISS temporariamente indisponível.',
+      logs: List.unmodifiable(logs),
+    );
   }
 
   static Future<Position> _getPosition() async {
@@ -117,8 +204,17 @@ class IssService {
     }
 
     return Geolocator.getCurrentPosition(
-      locationSettings:
-          const LocationSettings(accuracy: LocationAccuracy.low),
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.low),
     );
   }
+}
+
+/// Exceção com logs do fluxo ISS para exibição visual na UI.
+class IssException implements Exception {
+  final String message;
+  final List<IssLogEntry> logs;
+  const IssException(this.message, {required this.logs});
+
+  @override
+  String toString() => message;
 }

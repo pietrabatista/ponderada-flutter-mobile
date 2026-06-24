@@ -281,18 +281,24 @@ class _IssCardState extends State<_IssCard> {
     super.dispose();
   }
 
+  List<IssLogEntry> _lastLogs = [];
+
   Future<IssPassTime> _fetchAndSchedule() async {
-    final pass = await IssService.nextPass();
-    if (pass.time != null) {
-      NotificationService.scheduleIssPass(pass.time!).catchError((_) {});
-      // Atualiza o countdown a cada 30 segundos
-      _countdownTimer?.cancel();
-      _countdownTimer =
-          Timer.periodic(const Duration(seconds: 30), (_) {
-        if (mounted) setState(() {});
-      });
+    try {
+      final pass = await IssService.nextPass();
+      if (mounted) setState(() => _lastLogs = pass.logs);
+      if (pass.time != null) {
+        NotificationService.scheduleIssPass(pass.time!).catchError((_) {});
+        _countdownTimer?.cancel();
+        _countdownTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+          if (mounted) setState(() {});
+        });
+      }
+      return pass;
+    } on IssException catch (e) {
+      if (mounted) setState(() => _lastLogs = e.logs);
+      rethrow;
     }
-    return pass;
   }
 
   void _retry() {
@@ -301,6 +307,8 @@ class _IssCardState extends State<_IssCard> {
       _future = _fetchAndSchedule();
     });
   }
+
+  bool _showLogs = false;
 
   @override
   Widget build(BuildContext context) {
@@ -314,72 +322,143 @@ class _IssCardState extends State<_IssCard> {
         return Card(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const CircleAvatar(
-                  backgroundColor: Colors.blueGrey,
-                  child: Icon(Icons.rocket_launch_outlined, color: Colors.white),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Estação Espacial Internacional',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 4),
-                      if (isLoading)
-                        const Text('Calculando próxima passagem...',
-                            style: TextStyle(fontSize: 12, color: Colors.white54))
-                      else if (hasError)
-                        Text(
-                          snapshot.error.toString().replaceAll('Exception: ', ''),
-                          style: const TextStyle(fontSize: 12, color: Colors.redAccent),
-                          maxLines: 2,
-                        )
-                      else ...[
-                        Text(
-                          pass!.label,
-                          style: const TextStyle(fontSize: 12, color: Colors.white70),
-                          maxLines: 2,
-                        ),
-                        if (pass.countdown.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: Colors.blueGrey.shade700,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              pass.countdown,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
+                Row(
+                  children: [
+                    const CircleAvatar(
+                      backgroundColor: Colors.blueGrey,
+                      child: Icon(Icons.rocket_launch_outlined, color: Colors.white),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Estação Espacial Internacional',
+                            style: TextStyle(fontWeight: FontWeight.w600),
                           ),
+                          const SizedBox(height: 4),
+                          if (isLoading)
+                            const Text('Buscando posição da ISS...',
+                                style: TextStyle(fontSize: 12, color: Colors.white54))
+                          else if (hasError)
+                            Text(
+                              snapshot.error.toString().replaceAll('Exception: ', ''),
+                              style: const TextStyle(fontSize: 12, color: Colors.redAccent),
+                              maxLines: 2,
+                            )
+                          else ...[
+                            Text(
+                              pass!.label,
+                              style: const TextStyle(fontSize: 12, color: Colors.white70),
+                              maxLines: 2,
+                            ),
+                            if (pass.countdown.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.blueGrey.shade700,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  pass.countdown,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ],
-                      ],
+                      ),
+                    ),
+                    if (isLoading)
+                      const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else ...[
+                      if (hasError)
+                        IconButton(
+                          icon: const Icon(Icons.refresh),
+                          onPressed: _retry,
+                          tooltip: 'Tentar novamente',
+                        ),
+                      if (_lastLogs.isNotEmpty)
+                        IconButton(
+                          icon: Icon(
+                            _showLogs ? Icons.bug_report : Icons.bug_report_outlined,
+                            size: 20,
+                            color: _showLogs ? Colors.amber : Colors.white38,
+                          ),
+                          tooltip: 'Log de APIs',
+                          onPressed: () => setState(() => _showLogs = !_showLogs),
+                        ),
                     ],
-                  ),
+                  ],
                 ),
-                if (isLoading)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else if (hasError)
-                  IconButton(
-                    icon: const Icon(Icons.refresh),
-                    onPressed: _retry,
-                    tooltip: 'Tentar novamente',
+                if (_showLogs && _lastLogs.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.black38,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'LOG DE APIS',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.amber,
+                            letterSpacing: 1.2,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        ..._lastLogs.map((e) => Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    e.ok ? '✓' : '✗',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: e.ok ? Colors.greenAccent : Colors.redAccent,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      '${e.step}${e.elapsed != null ? " (${e.elapsed!.inMilliseconds}ms)" : ""}\n${e.detail}',
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.white60,
+                                        fontFamily: 'monospace',
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )),
+                      ],
+                    ),
                   ),
+                ],
               ],
             ),
           ),

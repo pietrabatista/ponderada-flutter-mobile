@@ -1,10 +1,10 @@
-# 🌌 Diário do Céu
+# Diário do Céu
 
 Aplicativo mobile desenvolvido em Flutter para registro de observações astronômicas. O usuário pode fotografar o céu, registrar o que viu (Lua, planetas, meteoros, ISS etc.), ver a Foto Astronômica do Dia da NASA e acompanhar a passagem da Estação Espacial Internacional sobre sua localização.
 
 ---
 
-## 📱 Proposta da aplicação
+## Proposta da aplicação
 
 ### Problema
 Entusiastas de astronomia amateur não têm uma forma simples e integrada de registrar suas observações pessoais. Aplicativos existentes são complexos ou focados em profissionais — faltam soluções que unam **captura de foto + GPS + dados astronômicos em tempo real** numa interface acessível.
@@ -13,16 +13,16 @@ Entusiastas de astronomia amateur não têm uma forma simples e integrada de reg
 Estudantes, curiosos e entusiastas de astronomia amateur que querem manter um diário visual das próprias observações do céu.
 
 ### O que o app faz
-- 📷 **Registra observações**: foto tirada na hora, localização GPS automática, título com autocomplete (Lua, Marte, Saturno, ISS…) e descrição livre
-- 🖼️ **Foto Astronômica do Dia (APOD)**: integração com a API da NASA, com cache local — a imagem é baixada uma vez por dia e exibida offline; vídeos do YouTube mostram thumbnail com tap para abrir
-- 🛸 **ISS em tempo real**: posição atual e countdown até a próxima passagem sobre a localização do usuário, com notificação local 5 minutos antes
-- 📋 **Histórico**: listagem de todos os registros com busca por nome, filtro por período, swipe para excluir
-- 🔔 **Notificações**: passagem da ISS (agendada automaticamente) e APOD diário às 9h (configurável)
-- 👤 **Perfil**: toggles para ativar/desativar cada tipo de notificação, logout
+- **Registra observações**: foto tirada na hora, localização GPS automática, título com autocomplete (Lua, Marte, Saturno, ISS…) e descrição livre
+- **Foto Astronômica do Dia (APOD)**: integração com a API da NASA, com cache local — a imagem é baixada uma vez por dia e exibida offline; vídeos do YouTube mostram thumbnail com tap para abrir
+- **ISS em tempo real**: posição atual e countdown até a próxima passagem sobre a localização do usuário, com notificação local 5 minutos antes
+- **Histórico**: listagem de todos os registros com busca por nome, filtro por período, swipe para excluir
+- **Notificações**: passagem da ISS (agendada automaticamente) e APOD diário às 9h (configurável)
+- **Perfil**: toggles para ativar/desativar cada tipo de notificação, logout
 
 ---
 
-## 🛠️ Tecnologias utilizadas
+## Tecnologias utilizadas
 
 | Tecnologia | Uso |
 |---|---|
@@ -42,7 +42,7 @@ Estudantes, curiosos e entusiastas de astronomia amateur que querem manter um di
 
 ---
 
-## ⚙️ Setup e execução
+## Setup e execução
 
 ### Pré-requisitos
 - [Flutter SDK](https://flutter.dev/docs/get-started/install) ≥ 3.11
@@ -93,7 +93,7 @@ flutter run
 
 ---
 
-## 🗃️ Estrutura do projeto
+## Estrutura do projeto
 
 ```
 lib/
@@ -123,9 +123,9 @@ lib/
 
 ---
 
-## 📓 Diário de desenvolvimento
+## Diário de desenvolvimento
 
-### 🔴 Dificuldade 1 — Credenciais do Supabase e o `.env` que sumia
+### Dificuldade 1 — Credenciais do Supabase e o `.env` que sumia
 
 **O problema:** Comecei usando `flutter_dotenv` para manter as credenciais do Supabase fora do código-fonte. Funcionou perfeitamente no computador de desenvolvimento, mas quando rodei no tablet Android (Samsung Galaxy Tab SM-X510), o app travava na tela inicial com `EmptyEnvFileError`. O arquivo `.env` estava listado no `.gitignore` e, ao rodar o app em outro dispositivo, ele simplesmente não existia — o Flutter tenta carregar o asset em runtime e falha silenciosamente, congelando o app.
 
@@ -133,7 +133,7 @@ lib/
 
 ---
 
-### 🔴 Dificuldade 2 — Build Android quebrando com `flutter_local_notifications`
+### Dificuldade 2 — Build Android quebrando com `flutter_local_notifications`
 
 **O problema:** Ao compilar para Android pela primeira vez com `flutter_local_notifications`, recebi um erro de build relacionado a `java.lang.invoke.MethodHandles`. A biblioteca usa APIs do Java 8 que não existem nativamente em versões antigas do Android — é necessário um processo chamado **core library desugaring** para fazer o backport dessas APIs.
 
@@ -151,7 +151,7 @@ Além disso, o Android 13+ exige declaração explícita de permissões no `Andr
 
 ---
 
-### 🔴 Dificuldade 3 — API da ISS completamente fora do ar
+### Dificuldade 3 — API da ISS completamente fora do ar
 
 **O problema:** A `api.open-notify.org/iss-pass.json` é a única API gratuita e sem necessidade de chave para prever passagens da ISS. Durante o desenvolvimento ela ficou completamente indisponível — o DNS do servidor não resolvia, causando `SocketException: Failed host lookup`. O código original capturava esse erro e exibia "Sem conexão com a internet", o que era incorreto e confuso para o usuário com internet funcionando normalmente.
 
@@ -166,7 +166,7 @@ Isso resolveu o problema: o usuário vê a posição atual da ISS mesmo com a AP
 
 ---
 
-### 🟡 Dificuldade 4 — Imagens do Supabase Storage não carregavam
+### Dificuldade 4 — Imagens do Supabase Storage não carregavam
 
 **O problema:** As fotos dos registros não apareciam em nenhuma tela — o `errorBuilder` era ativado silenciosamente. O bucket estava configurado como **privado** no Supabase (por segurança, para que cada usuário acesse apenas suas próprias fotos), então as URLs geradas por `getPublicUrl` retornavam 403. Tentei adicionar `Authorization: Bearer <token>` manualmente no `Image.network`, mas o token estático ficava desatualizado após 1 hora de sessão, e algumas configurações de CDN rejeitavam o header.
 
@@ -174,7 +174,7 @@ Isso resolveu o problema: o usuário vê a posição atual da ISS mesmo com a AP
 
 ---
 
-### 🟡 Dificuldade 5 — APOD retornando 503 por limite de requisições
+### Dificuldade 5 — APOD retornando 503 por limite de requisições
 
 **O problema:** A NASA limita a `DEMO_KEY` a 30 requisições por hora por IP. Durante o desenvolvimento intenso, com vários `flutter run` e hot-reloads seguidos, o limite era atingido rapidamente e o card da Foto do Dia exibia erro. Além disso, o app chamava a API **toda vez** que abria a tela inicial, mesmo que a foto não tivesse mudado desde a última abertura.
 
@@ -186,7 +186,7 @@ Na abertura do app, verifica primeiro se o cache é do dia atual. Se sim, carreg
 
 ---
 
-### 🟡 Dificuldade 6 — `IndexedStack` e dados desatualizados entre telas
+### Dificuldade 6 — `IndexedStack` e dados desatualizados entre telas
 
 **O problema:** O `BottomNavigationBar` usa `IndexedStack` para preservar o estado de cada aba (posição de scroll, filtros de busca ativos). O efeito colateral é que o `initState` de cada tela roda **uma única vez** durante toda a vida do app. Após criar um novo registro ou excluir um existente, tanto o histórico quanto os "últimos registros" da home continuavam mostrando dados antigos até o app ser reiniciado.
 
@@ -199,13 +199,8 @@ Cada tela que escuta o notifier chama seu método de `_fetch()` ao ser notificad
 
 ---
 
-## 🎥 Vídeo demonstrativo
+## Vídeo demonstrativo
 
-> _Adicionar link do vídeo de demonstração aqui._
+> _ link do vídeo de demonstração aqui._
 
----
 
-## 👤 Autora
-
-**Pietra Batista** — Engenharia de Software · Inteli  
-Módulo 10 · Ponderada Mobile Flutter

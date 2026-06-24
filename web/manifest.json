@@ -1,6 +1,6 @@
 {
-    "name": "diario_do_ceu",
-    "short_name": "diario_do_ceu",
+    "name": "SkySight",
+    "short_name": "SkySight",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

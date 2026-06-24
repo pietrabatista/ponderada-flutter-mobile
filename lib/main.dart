@@ -57,7 +57,7 @@ class DiarioDoCeuApp extends StatelessWidget {
     }
 
     return MaterialApp(
-      title: 'Diário do Céu',
+      title: 'SkySight',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(

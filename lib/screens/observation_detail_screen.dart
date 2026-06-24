@@ -22,7 +22,7 @@ class ObservationDetailScreen extends StatelessWidget {
   }
 
   String get _shareText {
-    return 'Vi ${observation.titulo} em $_formattedDate! via Diário do Céu ✨';
+    return 'Vi ${observation.titulo} em $_formattedDate! via SkySight ✨';
   }
 
   Future<void> _share(BuildContext context) async {

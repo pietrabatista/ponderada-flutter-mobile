@@ -21,7 +21,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Diário do Céu'),
+        title: const Text('SkySight'),
         centerTitle: false,
       ),
       body: ListView(

@@ -37,7 +37,7 @@ class _AuthScreenState extends State<AuthScreen>
               const Icon(Icons.nightlight_round, size: 64, color: Colors.white70),
               const SizedBox(height: 12),
               Text(
-                'Diário do Céu',
+                'SkySight',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),

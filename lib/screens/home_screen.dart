@@ -56,6 +56,7 @@ class _ApodData {
 
 class _ApodCardState extends State<_ApodCard> {
   late Future<_ApodData> _future;
+  bool _expandedDesc = false;
 
   @override
   void initState() {
@@ -128,8 +129,25 @@ class _ApodCardState extends State<_ApodCard> {
                               color: Colors.white60,
                               height: 1.4,
                             ),
-                        maxLines: 4,
-                        overflow: TextOverflow.ellipsis,
+                        maxLines: _expandedDesc ? null : 4,
+                        overflow: _expandedDesc
+                            ? TextOverflow.visible
+                            : TextOverflow.ellipsis,
+                      ),
+                      GestureDetector(
+                        onTap: () =>
+                            setState(() => _expandedDesc = !_expandedDesc),
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            _expandedDesc ? 'Ver menos' : 'Ver mais',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                     if (snapshot.hasError) ...[
@@ -280,8 +298,7 @@ class _IssCardState extends State<_IssCard> {
 
   // Localização geocodificada (async, atualiza quando pronto)
   String? _geoLabel;
-  double? _lastGeoLat;
-  double? _lastGeoLon;
+  DateTime? _lastGeoTime;
 
   @override
   void initState() {
@@ -323,16 +340,16 @@ class _IssCardState extends State<_IssCard> {
 
   void _geocode(IssPassTime pass) {
     if (pass.currentLat == null) return;
+    final now = DateTime.now();
+    // Throttle: no máximo 1 requisição a cada 30s
+    if (_lastGeoTime != null &&
+        now.difference(_lastGeoTime!) < const Duration(seconds: 30)) return;
+    _lastGeoTime = now;
     final lat = double.tryParse(pass.currentLat!) ?? 0;
     final lon = double.tryParse(pass.currentLon!) ?? 0;
-    // Re-geocodifica somente se moveu mais de 2 graus (~200 km)
-    if (_lastGeoLat != null &&
-        (lat - _lastGeoLat!).abs() < 2 &&
-        (lon - _lastGeoLon!).abs() < 2) return;
-    _lastGeoLat = lat;
-    _lastGeoLon = lon;
     GeocodingService.toCountryCity(lat, lon).then((label) {
-      if (mounted && label != null) setState(() => _geoLabel = label);
+      if (!mounted) return;
+      setState(() => _geoLabel = label); // null = sobre oceano → mostra coords
     });
   }
 
@@ -347,6 +364,7 @@ class _IssCardState extends State<_IssCard> {
     setState(() {
       _current = null;
       _geoLabel = null;
+      _lastGeoTime = null;
       _future = _initialLoad();
     });
   }

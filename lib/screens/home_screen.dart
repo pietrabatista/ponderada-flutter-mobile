@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'observation_detail_screen.dart';
 import '../models/apod_model.dart';
 import '../models/observation_model.dart';
@@ -57,6 +57,7 @@ class _ApodData {
 class _ApodCardState extends State<_ApodCard> {
   late Future<_ApodData> _future;
   bool _expandedDesc = false;
+  YoutubePlayerController? _ytController;
 
   @override
   void initState() {
@@ -64,39 +65,110 @@ class _ApodCardState extends State<_ApodCard> {
     _future = _load();
   }
 
+  @override
+  void dispose() {
+    _ytController?.dispose();
+    super.dispose();
+  }
+
   Future<_ApodData> _load() async {
     final apod = await NasaService.fetchApod();
     NotificationService.scheduleApodDaily().catchError((_) {});
     final localFile = await ApodCacheService.localImageFile();
+    if (apod.mediaType != 'image') {
+      final ytId = _youtubeId(apod.url);
+      if (ytId != null) {
+        _ytController?.dispose();
+        _ytController = YoutubePlayerController(
+          initialVideoId: ytId,
+          flags: const YoutubePlayerFlags(
+            autoPlay: true,
+            loop: true,
+            mute: false,
+            forceHD: false,
+            enableCaption: false,
+          ),
+        );
+      }
+    }
     return _ApodData(apod, localFile);
   }
 
-  void _retry() => setState(() => _future = _load());
-
-  Future<void> _openUrl(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+  void _retry() {
+    _ytController?.dispose();
+    _ytController = null;
+    setState(() => _future = _load());
   }
+
+  void _openImageModal(BuildContext context, String url, File? localFile) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (_) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 5.0,
+                child: localFile != null
+                    ? Image.file(localFile, fit: BoxFit.contain)
+                    : Image.network(url, fit: BoxFit.contain),
+              ),
+            ),
+            Positioned(
+              top: 40,
+              right: 16,
+              child: IconButton(
+                style:
+                    IconButton.styleFrom(backgroundColor: Colors.black54),
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<_ApodData>(
       future: _future,
       builder: (context, snapshot) {
+        final isImage = snapshot.data?.apod.mediaType == 'image';
         return Card(
           clipBehavior: Clip.antiAlias,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              GestureDetector(
-                onTap: snapshot.hasData
-                    ? () => _openUrl(snapshot.data!.apod.url)
-                    : null,
-                child: _buildMedia(snapshot),
-              ),
+              isImage && snapshot.hasData
+                  ? GestureDetector(
+                      onTap: () => _openImageModal(
+                          context,
+                          snapshot.data!.apod.url,
+                          snapshot.data!.localImage),
+                      child: Stack(children: [
+                        _buildMedia(snapshot),
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Icon(Icons.open_in_full,
+                                color: Colors.white70, size: 14),
+                          ),
+                        ),
+                      ]),
+                    )
+                  : _buildMedia(snapshot),
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
@@ -189,32 +261,14 @@ class _ApodCardState extends State<_ApodCard> {
     final apod = data.apod;
 
     if (apod.mediaType != 'image') {
-      final ytId = _youtubeId(apod.url);
-      if (ytId != null) {
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            Image.network(
-              'https://img.youtube.com/vi/$ytId/hqdefault.jpg',
-              height: 200,
-              width: double.infinity,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _mediaBox(
-                child: const Icon(Icons.play_circle_outline,
-                    size: 64, color: Colors.white54),
-              ),
-            ),
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: Colors.black54,
-                borderRadius: BorderRadius.circular(32),
-              ),
-              child:
-                  const Icon(Icons.play_arrow, color: Colors.white, size: 40),
-            ),
-          ],
+      if (_ytController != null) {
+        return YoutubePlayerBuilder(
+          player: YoutubePlayer(
+            controller: _ytController!,
+            showVideoProgressIndicator: true,
+            progressIndicatorColor: Colors.amber,
+          ),
+          builder: (ctx, player) => SizedBox(height: 200, child: player),
         );
       }
       return _mediaBox(

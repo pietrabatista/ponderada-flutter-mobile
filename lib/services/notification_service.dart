@@ -9,6 +9,7 @@ class NotificationService {
 
   static const _issNotifId = 1;
   static const _apodNotifId = 2;
+  static const _testNotifId = 99;
 
   static const _issChannelId = 'iss_channel';
   static const _apodChannelId = 'apod_channel';
@@ -176,5 +177,31 @@ class NotificationService {
   static Future<void> cancelApod() async {
     await initialize();
     await _plugin.cancel(_apodNotifId);
+  }
+
+  // ─── Teste ──────────────────────────────────────────────────────────────────
+
+  static Future<void> sendTest() async {
+    await initialize();
+    await _plugin.show(
+      _testNotifId,
+      '🔔 Notificação de teste',
+      'SkySight está funcionando corretamente! 🌟',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'test_channel',
+          'Teste',
+          channelDescription: 'Canal de teste de notificações',
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: false,
+          presentSound: true,
+        ),
+      ),
+    );
   }
 }

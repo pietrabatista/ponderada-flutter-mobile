@@ -161,6 +161,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onTap: _logout,
                   ),
                 ),
+
+                const SizedBox(height: 32),
+                Text(
+                  'DESENVOLVIMENTO',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Colors.white54,
+                        letterSpacing: 1.2,
+                      ),
+                ),
+                const SizedBox(height: 8),
+
+                Card(
+                  child: ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: Colors.deepPurple,
+                      child: Icon(Icons.notifications_active,
+                          color: Colors.white, size: 20),
+                    ),
+                    title: const Text('Disparar notificação de teste'),
+                    subtitle: const Text('Envia uma notificação imediata'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      await NotificationService.sendTest();
+                      if (mounted) {
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text('Notificação enviada!'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ),
               ],
             ),
     );

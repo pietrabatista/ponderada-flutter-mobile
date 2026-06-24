@@ -8,6 +8,7 @@ import '../models/apod_model.dart';
 import '../models/observation_model.dart';
 import '../services/nasa_service.dart';
 import '../services/iss_service.dart';
+import '../services/geocoding_service.dart';
 import '../services/notification_service.dart';
 import '../services/apod_cache_service.dart';
 import '../widgets/supabase_image.dart';
@@ -47,10 +48,9 @@ class _ApodCard extends StatefulWidget {
   State<_ApodCard> createState() => _ApodCardState();
 }
 
-// Agrupamento do model + arquivo local da imagem
 class _ApodData {
   final ApodModel apod;
-  final File? localImage; // null = sem cache de imagem local
+  final File? localImage;
   const _ApodData(this.apod, this.localImage);
 }
 
@@ -66,16 +66,11 @@ class _ApodCardState extends State<_ApodCard> {
   Future<_ApodData> _load() async {
     final apod = await NasaService.fetchApod();
     NotificationService.scheduleApodDaily().catchError((_) {});
-    // Tenta carregar imagem local (pode não existir ainda se acabou de baixar)
     final localFile = await ApodCacheService.localImageFile();
     return _ApodData(apod, localFile);
   }
 
-  void _retry() {
-    setState(() {
-      _future = _load();
-    });
-  }
+  void _retry() => setState(() => _future = _load());
 
   Future<void> _openUrl(String url) async {
     final uri = Uri.tryParse(url);
@@ -96,7 +91,9 @@ class _ApodCardState extends State<_ApodCard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               GestureDetector(
-                onTap: snapshot.hasData ? () => _openUrl(snapshot.data!.apod.url) : null,
+                onTap: snapshot.hasData
+                    ? () => _openUrl(snapshot.data!.apod.url)
+                    : null,
                 child: _buildMedia(snapshot),
               ),
               Padding(
@@ -123,6 +120,18 @@ class _ApodCardState extends State<_ApodCard> {
                           .titleMedium
                           ?.copyWith(fontWeight: FontWeight.bold),
                     ),
+                    if (snapshot.hasData) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        snapshot.data!.apod.explanation,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white60,
+                              height: 1.4,
+                            ),
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                     if (snapshot.hasError) ...[
                       const SizedBox(height: 8),
                       TextButton.icon(
@@ -147,9 +156,9 @@ class _ApodCardState extends State<_ApodCard> {
     }
     if (snapshot.hasError || !snapshot.hasData) {
       return _mediaBox(
-        child: Column(
+        child: const Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
+          children: [
             Icon(Icons.cloud_off_outlined, size: 48, color: Colors.white30),
             SizedBox(height: 8),
             Text('Sem conexão', style: TextStyle(color: Colors.white38)),
@@ -164,7 +173,6 @@ class _ApodCardState extends State<_ApodCard> {
     if (apod.mediaType != 'image') {
       final ytId = _youtubeId(apod.url);
       if (ytId != null) {
-        // Mostra thumbnail do YouTube com ícone de play sobreposto
         return Stack(
           alignment: Alignment.center,
           children: [
@@ -185,15 +193,16 @@ class _ApodCardState extends State<_ApodCard> {
                 color: Colors.black54,
                 borderRadius: BorderRadius.circular(32),
               ),
-              child: const Icon(Icons.play_arrow, color: Colors.white, size: 40),
+              child:
+                  const Icon(Icons.play_arrow, color: Colors.white, size: 40),
             ),
           ],
         );
       }
       return _mediaBox(
-        child: Column(
+        child: const Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
+          children: [
             Icon(Icons.play_circle_outline, size: 64, color: Colors.white54),
             SizedBox(height: 8),
             Text('Vídeo do dia', style: TextStyle(color: Colors.white54)),
@@ -202,7 +211,6 @@ class _ApodCardState extends State<_ApodCard> {
       );
     }
 
-    // Preferência: arquivo local → fallback para URL da rede
     if (data.localImage != null) {
       return Image.file(
         data.localImage!,
@@ -212,15 +220,12 @@ class _ApodCardState extends State<_ApodCard> {
         errorBuilder: (_, __, ___) => _networkImage(apod.url),
       );
     }
-
     return _networkImage(apod.url);
   }
 
-  /// Extrai o ID do vídeo do YouTube de uma URL embed ou watch.
   String? _youtubeId(String url) {
     final uri = Uri.tryParse(url);
     if (uri == null) return null;
-    // youtube.com/embed/ID ou youtube.com/watch?v=ID
     if (uri.host.contains('youtube.com')) {
       final segments = uri.pathSegments;
       final embedIdx = segments.indexOf('embed');
@@ -229,7 +234,6 @@ class _ApodCardState extends State<_ApodCard> {
       }
       return uri.queryParameters['v'];
     }
-    // youtu.be/ID
     if (uri.host.contains('youtu.be') && uri.pathSegments.isNotEmpty) {
       return uri.pathSegments.first;
     }
@@ -241,10 +245,12 @@ class _ApodCardState extends State<_ApodCard> {
         height: 200,
         width: double.infinity,
         fit: BoxFit.cover,
-        loadingBuilder: (_, child, progress) =>
-            progress == null ? child : _mediaBox(child: const CircularProgressIndicator()),
+        loadingBuilder: (_, child, progress) => progress == null
+            ? child
+            : _mediaBox(child: const CircularProgressIndicator()),
         errorBuilder: (_, __, ___) => _mediaBox(
-          child: const Icon(Icons.broken_image_outlined, size: 64, color: Colors.white30),
+          child: const Icon(Icons.broken_image_outlined,
+              size: 64, color: Colors.white30),
         ),
       );
 
@@ -267,198 +273,179 @@ class _IssCard extends StatefulWidget {
 
 class _IssCardState extends State<_IssCard> {
   late Future<IssPassTime> _future;
-  Timer? _countdownTimer;
+  Timer? _refreshTimer;
+
+  // Último dado bem-sucedido — atualizado silenciosamente pelo timer
+  IssPassTime? _current;
+
+  // Localização geocodificada (async, atualiza quando pronto)
+  String? _geoLabel;
+  double? _lastGeoLat;
+  double? _lastGeoLon;
 
   @override
   void initState() {
     super.initState();
-    _future = _fetchAndSchedule();
+    _future = _initialLoad();
   }
 
   @override
   void dispose() {
-    _countdownTimer?.cancel();
+    _refreshTimer?.cancel();
     super.dispose();
   }
 
-  List<IssLogEntry> _lastLogs = [];
+  Future<IssPassTime> _initialLoad() async {
+    final pass = await IssService.nextPass();
+    if (mounted) {
+      setState(() => _current = pass);
+      _scheduleIssNotification(pass);
+      _geocode(pass);
+      _startRefreshTimer();
+    }
+    return pass;
+  }
 
-  Future<IssPassTime> _fetchAndSchedule() async {
-    try {
-      final pass = await IssService.nextPass();
-      if (mounted) setState(() => _lastLogs = pass.logs);
-      if (pass.time != null) {
-        NotificationService.scheduleIssPass(pass.time!).catchError((_) {});
-        _countdownTimer?.cancel();
-        _countdownTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-          if (mounted) setState(() {});
-        });
+  void _startRefreshTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      if (!mounted) return;
+      try {
+        final pass = await IssService.nextPass();
+        if (!mounted) return;
+        setState(() => _current = pass);
+        _geocode(pass);
+      } catch (_) {
+        // Mantém o último dado bom em caso de falha transitória
       }
-      return pass;
-    } on IssException catch (e) {
-      if (mounted) setState(() => _lastLogs = e.logs);
-      rethrow;
+    });
+  }
+
+  void _geocode(IssPassTime pass) {
+    if (pass.currentLat == null) return;
+    final lat = double.tryParse(pass.currentLat!) ?? 0;
+    final lon = double.tryParse(pass.currentLon!) ?? 0;
+    // Re-geocodifica somente se moveu mais de 2 graus (~200 km)
+    if (_lastGeoLat != null &&
+        (lat - _lastGeoLat!).abs() < 2 &&
+        (lon - _lastGeoLon!).abs() < 2) return;
+    _lastGeoLat = lat;
+    _lastGeoLon = lon;
+    GeocodingService.toCountryCity(lat, lon).then((label) {
+      if (mounted && label != null) setState(() => _geoLabel = label);
+    });
+  }
+
+  void _scheduleIssNotification(IssPassTime pass) {
+    if (pass.time != null) {
+      NotificationService.scheduleIssPass(pass.time!).catchError((_) {});
     }
   }
 
   void _retry() {
-    _countdownTimer?.cancel();
+    _refreshTimer?.cancel();
     setState(() {
-      _future = _fetchAndSchedule();
+      _current = null;
+      _geoLabel = null;
+      _future = _initialLoad();
     });
   }
-
-  bool _showLogs = false;
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<IssPassTime>(
       future: _future,
       builder: (context, snapshot) {
-        final isLoading = snapshot.connectionState == ConnectionState.waiting;
-        final hasError = snapshot.hasError;
-        final pass = snapshot.data;
+        final isLoading =
+            snapshot.connectionState == ConnectionState.waiting && _current == null;
+        final hasError = snapshot.hasError && _current == null;
+        final pass = _current ?? snapshot.data;
 
         return Card(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    const CircleAvatar(
-                      backgroundColor: Colors.blueGrey,
-                      child: Icon(Icons.rocket_launch_outlined, color: Colors.white),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Estação Espacial Internacional',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 4),
-                          if (isLoading)
-                            const Text('Buscando posição da ISS...',
-                                style: TextStyle(fontSize: 12, color: Colors.white54))
-                          else if (hasError)
-                            Text(
-                              snapshot.error.toString().replaceAll('Exception: ', ''),
-                              style: const TextStyle(fontSize: 12, color: Colors.redAccent),
-                              maxLines: 2,
-                            )
-                          else ...[
-                            Text(
-                              pass!.label,
-                              style: const TextStyle(fontSize: 12, color: Colors.white70),
-                              maxLines: 2,
-                            ),
-                            if (pass.countdown.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: Colors.blueGrey.shade700,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  pass.countdown,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ],
-                      ),
-                    ),
-                    if (isLoading)
-                      const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    else ...[
-                      if (hasError)
-                        IconButton(
-                          icon: const Icon(Icons.refresh),
-                          onPressed: _retry,
-                          tooltip: 'Tentar novamente',
-                        ),
-                      if (_lastLogs.isNotEmpty)
-                        IconButton(
-                          icon: Icon(
-                            _showLogs ? Icons.bug_report : Icons.bug_report_outlined,
-                            size: 20,
-                            color: _showLogs ? Colors.amber : Colors.white38,
-                          ),
-                          tooltip: 'Log de APIs',
-                          onPressed: () => setState(() => _showLogs = !_showLogs),
-                        ),
-                    ],
-                  ],
+                const CircleAvatar(
+                  backgroundColor: Colors.blueGrey,
+                  child:
+                      Icon(Icons.rocket_launch_outlined, color: Colors.white),
                 ),
-                if (_showLogs && _lastLogs.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.black38,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white12),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Estação Espacial Internacional',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      if (isLoading)
                         const Text(
-                          'LOG DE APIS',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.amber,
-                            letterSpacing: 1.2,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          'Buscando posição da ISS...',
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.white54),
+                        )
+                      else if (hasError)
+                        Text(
+                          snapshot.error
+                              .toString()
+                              .replaceAll('Exception: ', ''),
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.redAccent),
+                          maxLines: 2,
+                        )
+                      else if (pass != null) ...[
+                        Text(
+                          _geoLabel ?? pass.coordsLabel,
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.white70),
+                          maxLines: 2,
                         ),
-                        const SizedBox(height: 6),
-                        ..._lastLogs.map((e) => Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    e.ok ? '✓' : '✗',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: e.ok ? Colors.greenAccent : Colors.redAccent,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      '${e.step}${e.elapsed != null ? " (${e.elapsed!.inMilliseconds}ms)" : ""}\n${e.detail}',
-                                      style: const TextStyle(
-                                        fontSize: 10,
-                                        color: Colors.white60,
-                                        fontFamily: 'monospace',
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                        if (_geoLabel != null && pass.currentLat != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            '${pass.currentLat}°, ${pass.currentLon}°',
+                            style: const TextStyle(
+                                fontSize: 10, color: Colors.white38),
+                          ),
+                        ],
+                        if (pass.countdown.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.blueGrey.shade700,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              pass.countdown,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
                               ),
-                            )),
+                            ),
+                          ),
+                        ],
                       ],
-                    ),
+                    ],
                   ),
-                ],
+                ),
+                if (isLoading)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else if (hasError)
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: _retry,
+                    tooltip: 'Tentar novamente',
+                  ),
               ],
             ),
           ),
@@ -495,11 +482,7 @@ class _RecentObservationsState extends State<_RecentObservations> {
     super.dispose();
   }
 
-  void _onRefresh() {
-    setState(() {
-      _future = _fetch();
-    });
-  }
+  void _onRefresh() => setState(() => _future = _fetch());
 
   Future<List<ObservationModel>> _fetch() async {
     final data = await Supabase.instance.client
@@ -541,7 +524,8 @@ class _RecentObservationsState extends State<_RecentObservations> {
                   padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
-                      const Icon(Icons.error_outline, color: Colors.redAccent),
+                      const Icon(Icons.error_outline,
+                          color: Colors.redAccent),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
@@ -550,11 +534,8 @@ class _RecentObservationsState extends State<_RecentObservations> {
                         ),
                       ),
                       TextButton(
-                        onPressed: () {
-                          setState(() {
-                            _future = _fetch();
-                          });
-                        },
+                        onPressed: () =>
+                            setState(() => _future = _fetch()),
                         child: const Text('Tentar'),
                       ),
                     ],
@@ -566,10 +547,12 @@ class _RecentObservationsState extends State<_RecentObservations> {
             if (list.isEmpty) {
               return Card(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 24, horizontal: 16),
                   child: Column(
                     children: [
-                      const Icon(Icons.nightlight_round, size: 40, color: Colors.white24),
+                      const Icon(Icons.nightlight_round,
+                          size: 40, color: Colors.white24),
                       const SizedBox(height: 8),
                       Text(
                         'Nenhum registro ainda.\nToque em + para começar!',
@@ -592,7 +575,8 @@ class _RecentObservationsState extends State<_RecentObservations> {
                       child: ListTile(
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => ObservationDetailScreen(observation: obs),
+                            builder: (_) =>
+                                ObservationDetailScreen(observation: obs),
                           ),
                         ),
                         leading: ClipRRect(

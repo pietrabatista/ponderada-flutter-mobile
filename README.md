@@ -1,4 +1,4 @@
-# Diário do Céu
+# SkySight
 
 Aplicativo mobile desenvolvido em Flutter para registro de observações astronômicas. O usuário pode fotografar o céu, registrar o que viu (Lua, planetas, meteoros, ISS etc.), ver a Foto Astronômica do Dia da NASA e acompanhar a passagem da Estação Espacial Internacional sobre sua localização.
 

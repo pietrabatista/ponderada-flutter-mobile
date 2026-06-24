@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+
+  <!-- Background -->
+  <circle cx="100" cy="100" r="100" fill="#0A1628"/>
+
+  <!-- Background stars -->
+  <circle cx="30"  cy="42"  r="1.2" fill="white" opacity="0.8"/>
+  <circle cx="160" cy="35"  r="0.9" fill="white" opacity="0.7"/>
+  <circle cx="172" cy="158" r="1.0" fill="white" opacity="0.6"/>
+  <circle cx="26"  cy="162" r="0.8" fill="white" opacity="0.7"/>
+  <circle cx="78"  cy="22"  r="0.8" fill="white" opacity="0.9"/>
+  <circle cx="143" cy="178" r="0.8" fill="white" opacity="0.6"/>
+  <circle cx="184" cy="88"  r="0.8" fill="white" opacity="0.7"/>
+  <circle cx="14"  cy="102" r="0.8" fill="white" opacity="0.5"/>
+  <circle cx="55"  cy="170" r="0.7" fill="white" opacity="0.5"/>
+  <circle cx="168" cy="62"  r="0.7" fill="white" opacity="0.6"/>
+
+  <!-- 4-point sparkle (top-right) -->
+  <g transform="translate(158,44)">
+    <polygon points="0,-6 1,-1 6,0 1,1 0,6 -1,1 -6,0 -1,-1" fill="white" opacity="0.95"/>
+  </g>
+
+  <!-- 4-point sparkle (bottom-left, smaller) -->
+  <g transform="translate(42,158)">
+    <polygon points="0,-4 0.7,-0.7 4,0 0.7,0.7 0,4 -0.7,0.7 -4,0 -0.7,-0.7" fill="white" opacity="0.7"/>
+  </g>
+
+  <!-- Eye / lens outline -->
+  <path d="M 34 100 C 54 60 146 60 166 100 C 146 140 54 140 34 100 Z"
+        fill="none" stroke="#4A9EFF" stroke-width="4"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Iris background -->
+  <circle cx="100" cy="100" r="30" fill="#0D2240" stroke="#4A9EFF" stroke-width="3"/>
+
+  <!-- Inner dashed ring -->
+  <circle cx="100" cy="100" r="19"
+          fill="none" stroke="#2A6BAF" stroke-width="1"
+          stroke-dasharray="3.5 4.5" opacity="0.7"/>
+
+  <!-- Crosshair — top -->
+  <line x1="100" y1="76" x2="100" y2="88" stroke="#4A9EFF" stroke-width="2" stroke-linecap="round"/>
+  <!-- Crosshair — bottom -->
+  <line x1="100" y1="112" x2="100" y2="124" stroke="#4A9EFF" stroke-width="2" stroke-linecap="round"/>
+  <!-- Crosshair — left -->
+  <line x1="76"  y1="100" x2="88"  y2="100" stroke="#4A9EFF" stroke-width="2" stroke-linecap="round"/>
+  <!-- Crosshair — right -->
+  <line x1="112" y1="100" x2="124" y2="100" stroke="#4A9EFF" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Center star dot -->
+  <circle cx="100" cy="100" r="8"   fill="#4A9EFF"/>
+  <circle cx="100" cy="100" r="4.5" fill="#A8D8FF"/>
+  <circle cx="100" cy="100" r="1.8" fill="white"/>
+
+</svg>

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'main_screen.dart';
 
@@ -34,7 +35,7 @@ class _AuthScreenState extends State<AuthScreen>
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
           child: Column(
             children: [
-              const Icon(Icons.nightlight_round, size: 64, color: Colors.white70),
+              SvgPicture.asset('assets/logo.svg', width: 90, height: 90),
               const SizedBox(height: 12),
               Text(
                 'SkySight',

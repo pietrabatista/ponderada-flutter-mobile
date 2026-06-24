@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:video_player/video_player.dart';
 import 'observation_detail_screen.dart';
 import '../models/apod_model.dart';
 import '../models/observation_model.dart';
@@ -58,6 +59,7 @@ class _ApodCardState extends State<_ApodCard> {
   late Future<_ApodData> _future;
   bool _expandedDesc = false;
   YoutubePlayerController? _ytController;
+  VideoPlayerController? _vpController;
 
   @override
   void initState() {
@@ -68,6 +70,7 @@ class _ApodCardState extends State<_ApodCard> {
   @override
   void dispose() {
     _ytController?.dispose();
+    _vpController?.dispose();
     super.dispose();
   }
 
@@ -75,9 +78,11 @@ class _ApodCardState extends State<_ApodCard> {
     final apod = await NasaService.fetchApod();
     NotificationService.scheduleApodDaily().catchError((_) {});
     final localFile = await ApodCacheService.localImageFile();
+
     if (apod.mediaType != 'image') {
       final ytId = _youtubeId(apod.url);
       if (ytId != null) {
+        // Vídeo do YouTube
         _ytController?.dispose();
         _ytController = YoutubePlayerController(
           initialVideoId: ytId,
@@ -89,6 +94,14 @@ class _ApodCardState extends State<_ApodCard> {
             enableCaption: false,
           ),
         );
+      } else {
+        // Vídeo direto (MP4, etc.)
+        _vpController?.dispose();
+        _vpController =
+            VideoPlayerController.networkUrl(Uri.parse(apod.url));
+        await _vpController!.initialize();
+        await _vpController!.setLooping(true);
+        await _vpController!.play();
       }
     }
     return _ApodData(apod, localFile);
@@ -97,6 +110,8 @@ class _ApodCardState extends State<_ApodCard> {
   void _retry() {
     _ytController?.dispose();
     _ytController = null;
+    _vpController?.dispose();
+    _vpController = null;
     setState(() => _future = _load());
   }
 
@@ -261,6 +276,7 @@ class _ApodCardState extends State<_ApodCard> {
     final apod = data.apod;
 
     if (apod.mediaType != 'image') {
+      // YouTube
       if (_ytController != null) {
         return YoutubePlayerBuilder(
           player: YoutubePlayer(
@@ -271,16 +287,24 @@ class _ApodCardState extends State<_ApodCard> {
           builder: (ctx, player) => SizedBox(height: 200, child: player),
         );
       }
-      return _mediaBox(
-        child: const Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.play_circle_outline, size: 64, color: Colors.white54),
-            SizedBox(height: 8),
-            Text('Vídeo do dia', style: TextStyle(color: Colors.white54)),
-          ],
-        ),
-      );
+      // Vídeo direto (MP4 etc.)
+      if (_vpController != null && _vpController!.value.isInitialized) {
+        return SizedBox(
+          height: 200,
+          width: double.infinity,
+          child: FittedBox(
+            fit: BoxFit.cover,
+            clipBehavior: Clip.hardEdge,
+            child: SizedBox(
+              width: _vpController!.value.size.width,
+              height: _vpController!.value.size.height,
+              child: VideoPlayer(_vpController!),
+            ),
+          ),
+        );
+      }
+      // Inicializando vídeo
+      return _mediaBox(child: const CircularProgressIndicator());
     }
 
     if (data.localImage != null) {

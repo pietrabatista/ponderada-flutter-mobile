@@ -44,6 +44,7 @@ dependencies:
   url_launcher: ^6.3.0
   flutter_svg: ^2.0.10+1
   youtube_player_flutter: ^9.1.1
+  video_player: ^2.9.2
 
 dev_dependencies:
   flutter_test:

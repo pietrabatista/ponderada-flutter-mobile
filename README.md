@@ -226,4 +226,4 @@ Para facilitar testes sem esperar uma passagem real, a tela de Perfil tem um bot
 
 ## Vídeo demonstrativo
 
-> _link do vídeo de demonstração aqui._
+> _https://drive.google.com/file/d/1CLunMd3Emmsa-eoMB6ZnmqKej0WCm488/view?usp=sharing_
